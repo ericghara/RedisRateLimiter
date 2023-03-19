@@ -7,6 +7,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class SpringRedisApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(SpringRedisApplication.class, args);
+        SpringApplication.run( SpringRedisApplication.class, args );
     }
 }

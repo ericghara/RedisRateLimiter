@@ -3,19 +3,14 @@ package com.ericgha.service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.connection.jedis.JedisConnection;
-import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.temporal.TemporalField;
+import java.util.List;
 import java.util.Objects;
 
 @Service
@@ -23,22 +18,24 @@ public class EventMap {
 
     private final ValueOperations<String, String> valueOps;
 
-    // consider making constructor parameter, so you can validate;
-    @Value("${app.event-duration-millis}")
-    private int eventDurationMillis;
+    private long eventDurationMillis;
     private final RedisTemplate<String, String> redisTemplate;
 
     @Autowired
-    EventMap(RedisTemplate<String,String> redisTemplate) {
+    EventMap(RedisTemplate<String, String> redisTemplate, @Value("${app.event-duration-millis}") long eventDurationMillis) {
         this.valueOps = redisTemplate.opsForValue();
         this.redisTemplate = redisTemplate;
+        this.setEventDuration( eventDurationMillis );
     }
 
-    public void setEventDuration(int millis) {
+    public void setEventDuration(long millis) throws IllegalArgumentException {
+        if (millis < 0) {
+            throw new IllegalArgumentException( "Event duration must be a positive long" );
+        }
         this.eventDurationMillis = millis;
     }
 
-    class ConditionalWrite implements SessionCallback<Boolean> {
+    class ConditionalWrite implements SessionCallback<List<Boolean>> {
 
         private final String key;
         private final long timestamp;
@@ -49,41 +46,39 @@ public class EventMap {
         }
 
         @Override
-        public Boolean execute(RedisOperations operations) throws DataAccessException {
-            if (operations.opsForValue().setIfAbsent(key, Long.toString(timestamp))) {
-                return true;
+        @SuppressWarnings( "unchecked" )
+        public List<Boolean> execute(RedisOperations operations) throws DataAccessException {
+            if (operations.opsForValue().setIfAbsent( key, Long.toString( timestamp ) )) {
+                return List.of( true );
             }
-            operations.watch(key);
+            operations.watch( key );
+            Object lastTime = operations.opsForValue().get( key );
             operations.multi();
-            Object lastTime = operations.opsForValue().get(key);
             long curTime = Instant.now().toEpochMilli();
-            if (Long.parseLong(lastTime.toString())+eventDurationMillis < curTime) {
-                operations.opsForValue().set( key, Long.toString(timestamp) );
-                operations.exec();
-                return true;
+            if (Long.parseLong( lastTime.toString() ) + eventDurationMillis < curTime) {
+                operations.opsForValue().set( key, Long.toString( timestamp ) );
+                return operations.exec();
             }
-            return false;
+            operations.discard();
+            return List.of( false );
         }
     }
 
-    void test() {
-        JedisConnection connection = (JedisConnection) redisTemplate.getConnectionFactory().getConnection();
-        connection.multi();
-        connection.commands().set(new byte[] {1}, new byte[] {1});
-        connection.exec();
-    }
-
     void put(String key, String value) {
-        valueOps.set(key, value);
+        valueOps.set( key, value );
     }
 
     public boolean putEvent(String event) {
         ConditionalWrite cw = new ConditionalWrite( event, Instant.now().toEpochMilli() );
-        return cw.execute( redisTemplate );
+        List<Boolean> found = redisTemplate.execute( cw );
+        if (Objects.isNull( found ) || found.size() != 1) {
+            return false;
+        }
+        return found.get( 0 );
     }
 
     public String get(String key) {
-        return valueOps.get(key);
+        return valueOps.get( key );
     }
 
 }
