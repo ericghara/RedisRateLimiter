@@ -5,11 +5,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+import redis.clients.jedis.JedisPoolConfig;
 
 @Configuration
-class RedisConfiguration {
+public class RedisConfig {
 
     @Value("${spring.data.redis.host}")
     String redisHostname;
@@ -22,13 +25,22 @@ class RedisConfiguration {
         // for future customization.
         // To switch to jedis remember to switch client type in spring.data.redis.client-type
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(redisHostname, redisPort);
-        return new JedisConnectionFactory(config);
+        JedisClientConfiguration jedisClientConfiguration = JedisClientConfiguration.builder().clientName(redisHostname).usePooling().build();
+        return new JedisConnectionFactory(config, jedisClientConfiguration);
     }
 
     @Bean
-    RedisTemplate<String, String> redisTemplate(JedisConnectionFactory redisConnectionFactory) {
+    RedisTemplate<String, String> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
         RedisTemplate<String, String> template = new RedisTemplate<>();
         template.setConnectionFactory(redisConnectionFactory);
+        template.setStringSerializer( new StringRedisSerializer() );
+        template.setKeySerializer( new StringRedisSerializer() );
+        template.setValueSerializer( new StringRedisSerializer() );
+        template.setHashKeySerializer( new StringRedisSerializer() );
+        template.setHashValueSerializer( new StringRedisSerializer() );
+        template.setEnableTransactionSupport( true );
+        template.setExposeConnection( true );
+        template.afterPropertiesSet();
         return template;
     }
 }

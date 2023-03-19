@@ -3,12 +3,14 @@ package com.ericgha.service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.connection.jedis.JedisConnection;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -48,16 +50,27 @@ public class EventMap {
 
         @Override
         public Boolean execute(RedisOperations operations) throws DataAccessException {
+            if (operations.opsForValue().setIfAbsent(key, Long.toString(timestamp))) {
+                return true;
+            }
+            operations.watch(key);
             operations.multi();
-            Object timeStr = operations.opsForValue().get(key);
+            Object lastTime = operations.opsForValue().get(key);
             long curTime = Instant.now().toEpochMilli();
-            if (Objects.isNull(timeStr) || Long.parseLong(timeStr.toString())+eventDurationMillis < curTime) {
+            if (Long.parseLong(lastTime.toString())+eventDurationMillis < curTime) {
                 operations.opsForValue().set( key, Long.toString(timestamp) );
                 operations.exec();
                 return true;
             }
             return false;
         }
+    }
+
+    void test() {
+        JedisConnection connection = (JedisConnection) redisTemplate.getConnectionFactory().getConnection();
+        connection.multi();
+        connection.commands().set(new byte[] {1}, new byte[] {1});
+        connection.exec();
     }
 
     void put(String key, String value) {
