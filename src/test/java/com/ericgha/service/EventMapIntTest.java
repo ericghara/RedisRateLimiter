@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.data.redis.DataRedisTest;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -18,10 +20,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Testcontainers
-@DataRedisTest(includeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {EventMap.class, RedisConfig.class}))
+@SpringBootTest(classes = {EventMap.class, RedisConfig.class})
+//@DataRedisTest(includeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {EventMap.class, RedisConfig.class}))
 public class EventMapIntTest {
 
     @Container
@@ -39,6 +43,8 @@ public class EventMapIntTest {
     private EventMap eventMap;
     @Autowired
     RedisConnectionFactory connectionFactory;
+    @Autowired
+    RedisTemplate<String,String> template;
 
     @AfterEach
     public void afterEach() {
@@ -81,9 +87,8 @@ public class EventMapIntTest {
         String event = "testEvent";
         Long oldTime = Instant.now().toEpochMilli() - eventDuration;
         eventMap.put( event, oldTime.toString() );
-        boolean didUpdate = eventMap.putEvent( event );
+        Boolean didUpdate = eventMap.putEvent( event );
         Assertions.assertTrue( didUpdate );
     }
-
 
 }
