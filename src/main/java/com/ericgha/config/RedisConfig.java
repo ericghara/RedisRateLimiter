@@ -1,7 +1,5 @@
 package com.ericgha.config;
 
-import exception.RetryableException;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,7 +8,6 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.retry.support.RetryTemplate;
 
 @Configuration
 public class RedisConfig {
@@ -33,18 +30,5 @@ public class RedisConfig {
         template.setEnableTransactionSupport( true );
         template.afterPropertiesSet();
         return template;
-    }
-
-    @Bean
-    @Qualifier("RedisRetry")
-    RetryTemplate retry(@Value("${app.redis.retry.initial-interval}") long initialInterval,
-                        @Value("${app.redis.retry.multiplier}") double multiplier,
-                        @Value("${app.redis.retry.max-interval}") long maxInterval) {
-        return RetryTemplate.builder()
-                .exponentialBackoff( initialInterval, multiplier, maxInterval, true )
-                .retryOn( RetryableException.class )
-                .build();
-
-
     }
 }

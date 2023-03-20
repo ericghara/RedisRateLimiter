@@ -5,7 +5,7 @@ plugins {
 }
 
 ext {
-    jUnitVersion = '5.9.1'
+    jUnitVersion = '5.9.2'
     testcontainersVersion = '1.17.6'
 }
 
