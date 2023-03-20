@@ -5,7 +5,7 @@ plugins {
 }
 
 ext {
-    jUnitVersion = '5.9.1'
+    jUnitVersion = '5.9.2'
     testcontainersVersion = '1.17.6'
 }
 
@@ -20,6 +20,7 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.retry:spring-retry'
     implementation 'redis.clients:jedis:4.3.1'
     testImplementation "org.junit.jupiter:junit-jupiter-api:${jUnitVersion}"
     testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${jUnitVersion}"

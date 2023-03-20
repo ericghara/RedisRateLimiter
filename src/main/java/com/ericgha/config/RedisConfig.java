@@ -12,13 +12,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 @Configuration
 public class RedisConfig {
 
-    @Value("${spring.data.redis.host}")
-    String redisHostname;
-    @Value("${spring.data.redis.port}")
-    Integer redisPort;
-
     @Bean
-    public RedisConnectionFactory redisConnectionFactory() {
+    public RedisConnectionFactory redisConnectionFactory(@Value("${spring.data.redis.host}") String redisHostname,
+                                                         @Value("${spring.data.redis.port}") Integer redisPort) {
         // not currently required as all properties currently are autoconfigurable, but leaving open
         // for future customization.
         // To switch to jedis remember to switch client type in spring.data.redis.client-type
