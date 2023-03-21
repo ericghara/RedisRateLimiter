@@ -57,6 +57,28 @@ public class EventQueue {
         return eventTimeRedisTemplate.opsForList().rightPush( queueId, event );
     }
 
+    public long size() {
+        // should not return null b/c not used in pipeline or transaction (see documentation)
+        return eventTimeRedisTemplate.opsForList().size( queueId );
+    }
+
+    public String queueId() {
+        return this.queueId;
+    }
+
+    // convenience method for testing
+    @Nullable
+    EventTime peek() {
+        return eventTimeRedisTemplate.opsForList().index( queueId, 0 );
+    }
+
+    // convenience method for testing
+    @Nullable
+    EventTime poll() {
+        return eventTimeRedisTemplate.opsForList().leftPop( queueId );
+    }
+
+
     public static class TimeConditionalPoll implements SessionCallback<List<EventTime>> {
 
         private final String key;

@@ -26,7 +26,8 @@ public class EventMapIntTest {
 
     @Container
     private static final GenericContainer<?> redis = new GenericContainer<>( DockerImageName.parse( "redis:7" ) )
-            .withExposedPorts( 6379 );
+            .withExposedPorts( 6379 )
+            .withReuse( true );
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
