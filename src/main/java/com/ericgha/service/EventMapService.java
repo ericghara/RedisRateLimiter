@@ -20,5 +20,7 @@ public class EventMapService {
         return retryTemplate.execute( _context -> eventMap.putEvent( event, timeMilli ) );
     }
 
-
+    public boolean tryDeleteEvent(String event, long timeMilli) throws WriteConflictException {
+        return retryTemplate.execute( _context -> eventMap.deleteEvent( event, timeMilli ));
+    }
 }
