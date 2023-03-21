@@ -42,8 +42,7 @@ public class EventMapIntTest {
     }
 
     @AfterEach
-    public void afterEach() throws InterruptedException {
-        connectionFactory.getConnection().commands().flushAll();
+    public void afterEach() {
         RedisConnection connection = connectionFactory.getConnection();
         connection.commands().flushAll();
     }
@@ -78,16 +77,6 @@ public class EventMapIntTest {
         Assertions.assertTrue( foundFirst );
         Assertions.assertFalse( foundSecond );
     }
-
-//    @Test
-//    public void tryNTimes() {
-//        long timestamp = Instant.now().toEpochMilli();
-//        String event = "testEvent";
-//        for (int i = 0; i < 100; i++) {
-//            eventMap.deleteEvent( event, timestamp );
-//            eventMap.putEvent(event, timestamp);
-//        }
-//    }
 
     @Test
     public void testPutEventNonBlockingDuplicate(@Value("${app.event-duration-millis}") Long eventDuration) {
