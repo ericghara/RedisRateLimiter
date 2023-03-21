@@ -5,8 +5,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
-import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
-import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 
 @Configuration
@@ -17,10 +17,10 @@ public class RedisConfig {
                                                          @Value("${spring.data.redis.port}") Integer redisPort) {
         // not currently required as all properties currently are autoconfigurable, but leaving open
         // for future customization.
-        // To switch to jedis remember to switch client type in spring.data.redis.client-type
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration( redisHostname, redisPort );
-        JedisClientConfiguration jedisClientConfiguration = JedisClientConfiguration.builder().clientName( redisHostname ).usePooling().build();
-        return new JedisConnectionFactory( config, jedisClientConfiguration );
+        LettuceClientConfiguration clientConfiguration = LettuceClientConfiguration.builder()
+                .clientName( redisHostname ).build();
+        return new LettuceConnectionFactory( config, clientConfiguration );
     }
 
     @Bean
@@ -28,6 +28,7 @@ public class RedisConfig {
         RedisTemplate<String, String> template = new RedisTemplate<>();
         template.setConnectionFactory( redisConnectionFactory );
         template.setEnableTransactionSupport( true );
+        template.setExposeConnection( true );
         template.afterPropertiesSet();
         return template;
     }
