@@ -16,7 +16,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-
+// should not return null b/c not used in pipeline or transaction (see documentation)
 import java.util.UUID;
 
 @Testcontainers
