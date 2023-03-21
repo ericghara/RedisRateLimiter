@@ -9,7 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -26,11 +26,12 @@ public class EventMapIntTest {
 
     @Container
     private static final GenericContainer<?> redis = new GenericContainer<>( DockerImageName.parse( "redis:7" ) )
-            .withExposedPorts( 6379 );
+            .withExposedPorts( 6379 )
+            .withReuse( true );
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    RedisTemplate<String, String> template;
+    StringRedisTemplate template;
     @Autowired
     private EventMap eventMap;
 

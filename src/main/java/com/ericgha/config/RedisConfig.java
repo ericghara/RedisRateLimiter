@@ -1,5 +1,10 @@
 package com.ericgha.config;
 
+import com.ericgha.dto.EventTime;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,6 +13,9 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
 public class RedisConfig {
@@ -24,11 +32,40 @@ public class RedisConfig {
     }
 
     @Bean
-    RedisTemplate<String, String> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
-        RedisTemplate<String, String> template = new RedisTemplate<>();
+    StringRedisTemplate stringRedisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory( redisConnectionFactory );
         template.setEnableTransactionSupport( true );
-        template.setExposeConnection( true );
+        template.afterPropertiesSet();
+        return template;
+    }
+
+    @Bean
+    Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer() {
+        ObjectMapper om = new ObjectMapper();
+        om.setVisibility( PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+        return new Jackson2JsonRedisSerializer<>(om, EventTime.class);
+    }
+
+    @Bean
+    StringRedisSerializer stringRedisSerializer() {
+        return new StringRedisSerializer();
+    }
+
+    @Bean
+    @Qualifier("EventTimeRedisTemplate")
+    RedisTemplate<String, EventTime> eventTimeRedisTemplate(RedisConnectionFactory redisConnectionFactory,
+                                                            StringRedisSerializer stringRedisSerializer,
+                                                            Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {
+        RedisTemplate<String, EventTime> template = new RedisTemplate<>();
+        template.setConnectionFactory( redisConnectionFactory );
+        // keys use string serializer
+        template.setKeySerializer( stringRedisSerializer );
+        template.setHashKeySerializer( stringRedisSerializer );
+        // values use json serializer
+        template.setValueSerializer( jackson2JsonRedisSerializer );
+        template.setHashValueSerializer( jackson2JsonRedisSerializer );
+        template.setEnableTransactionSupport( true );
         template.afterPropertiesSet();
         return template;
     }
