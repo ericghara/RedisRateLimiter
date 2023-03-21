@@ -1,5 +1,7 @@
 package com.ericgha.config;
 
+import com.ericgha.dto.EventTime;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,6 +10,7 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 @Configuration
 public class RedisConfig {
@@ -24,11 +27,20 @@ public class RedisConfig {
     }
 
     @Bean
-    RedisTemplate<String, String> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
-        RedisTemplate<String, String> template = new RedisTemplate<>();
+    StringRedisTemplate redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory( redisConnectionFactory );
         template.setEnableTransactionSupport( true );
-        template.setExposeConnection( true );
+        template.afterPropertiesSet();
+        return template;
+    }
+
+    @Bean
+    @Qualifier("EventTimeRedisTemplate")
+    RedisTemplate<String, EventTime> eventTimeRedisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        RedisTemplate<String, EventTime> template = new RedisTemplate<>();
+        template.setConnectionFactory( redisConnectionFactory );
+        template.setEnableTransactionSupport( true );
         template.afterPropertiesSet();
         return template;
     }

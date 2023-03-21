@@ -7,8 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisOperations;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Repository;
 
@@ -19,12 +19,12 @@ import java.util.Objects;
 public class EventMap {
 
     private final ValueOperations<String, String> valueOps;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
     private long eventDurationMillis;
 
     @Autowired
-    EventMap(RedisTemplate<String, String> redisTemplate, @Value("${app.event-duration-millis}") long eventDurationMillis) {
+    EventMap(StringRedisTemplate redisTemplate, @Value("${app.event-duration-millis}") long eventDurationMillis) {
         this.valueOps = redisTemplate.opsForValue();
         this.redisTemplate = redisTemplate;
         this.setEventDuration( eventDurationMillis );
@@ -38,8 +38,8 @@ public class EventMap {
     }
 
     // Convenience method for testing.
-    void put(String key, String value) {
-        valueOps.set( key, value );
+    String put(String key, String value) {
+        return valueOps.getAndSet( key, value );
     }
 
     /**
@@ -102,6 +102,7 @@ public class EventMap {
             operations.watch( key );
             Object curTimeObj = operations.opsForValue().get( key );
             if (Objects.isNull( curTimeObj )) {
+                operations.unwatch();
                 log.info( "Attempted to delete absent key {}", key );
                 return List.of( "" );
             }
@@ -150,7 +151,7 @@ public class EventMap {
             Object lastTime = operations.opsForValue().get( key );
             operations.multi();
             // present but expired
-            if (Long.parseLong( lastTime.toString() ) + eventDurationMillis < timestamp) {
+            if (Long.parseLong( lastTime.toString() ) + eventDurationMillis <= timestamp) {
                 operations.opsForValue().set( key, Long.toString( timestamp ) );
                 // returns an empty list if concurrent modification was made
                 return operations.exec();
