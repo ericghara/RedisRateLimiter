@@ -9,6 +9,8 @@ import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 
+import java.time.Duration;
+
 @Configuration
 public class RedisConfig {
 
@@ -19,8 +21,13 @@ public class RedisConfig {
         // for future customization.
         // To switch to jedis remember to switch client type in spring.data.redis.client-type
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration( redisHostname, redisPort );
-        JedisClientConfiguration jedisClientConfiguration = JedisClientConfiguration.builder().clientName( redisHostname ).usePooling().build();
-        return new JedisConnectionFactory( config, jedisClientConfiguration );
+        JedisClientConfiguration jedisClientConfiguration = JedisClientConfiguration.builder()
+                .clientName( redisHostname ).usePooling().build();
+        JedisConnectionFactory connectionFactory = new JedisConnectionFactory( config, jedisClientConfiguration );
+        connectionFactory.getPoolConfig().setMaxIdle( 8 );
+        connectionFactory.getPoolConfig().setMaxTotal( 8 );
+        connectionFactory.getPoolConfig().setMaxWait( Duration.ofSeconds(2) );
+        return connectionFactory;
     }
 
     @Bean
@@ -28,6 +35,7 @@ public class RedisConfig {
         RedisTemplate<String, String> template = new RedisTemplate<>();
         template.setConnectionFactory( redisConnectionFactory );
         template.setEnableTransactionSupport( true );
+        template.setExposeConnection( true );
         template.afterPropertiesSet();
         return template;
     }
