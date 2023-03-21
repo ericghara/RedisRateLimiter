@@ -90,6 +90,13 @@ public class EventMap {
             this.timestamp = timestamp;
         }
 
+        /**
+         *
+         * @param operations Redis operations
+         * @return An empty List if a concurrent modification occurred, a single element list with an empty string
+         * if no delete was performed, a single element list only containing the deleted value if a deletion occurred.
+         * @throws DataAccessException
+         */
         @SuppressWarnings("unchecked")
         public List<String> execute(RedisOperations operations) throws DataAccessException {
             operations.watch( key );

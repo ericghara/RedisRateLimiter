@@ -52,4 +52,14 @@ public class EventMapServiceTest {
         Assertions.assertTrue( eventMapService.tryAddEvent( "testEvent", 123 ) );
         Mockito.verify( eventMapMock, times( 3 ) ).putEvent( Mockito.anyString(), Mockito.anyLong() );
     }
+
+    @Test
+    @DisplayName( "tryDeleteEvent calls EventMap#deleteEvent" )
+    public void tryDeleteEventCallsDeleteEvent() {
+        Mockito.doReturn(true)
+                .when(eventMapMock)
+                .deleteEvent(  Mockito.anyString(), Mockito.anyLong() );
+        eventMapService.tryDeleteEvent( "testEvent", 123 );
+        Mockito.verify(eventMapMock).deleteEvent( Mockito.anyString(), Mockito.anyLong() );
+    }
 }
