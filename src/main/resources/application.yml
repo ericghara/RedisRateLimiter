@@ -7,14 +7,20 @@ spring:
       port: 6379
 app:
   event-duration-millis: 10000
-  redis:
+  event-map:
     retry:
       # configured to do 5 attempts (t = 0, 0.5, 1.25, 2.375, 4.063 sec)
       initial-interval: 500
       multiplier: 1.5
       num-attempts: 5
+  event-queue:
+    retry:
+      # 3 attempts with 3ms delay between each
+      num-attempts: 3
+      interval: 3
+    num-workers: 2
 
 logging:
   level:
     org:
-      springframework: debug
+#      springframework: debug

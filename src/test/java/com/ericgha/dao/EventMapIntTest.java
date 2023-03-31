@@ -35,11 +35,13 @@ public class EventMapIntTest {
     @Autowired
     private EventMap eventMap;
 
+    private static final int EVENT_DURATION = 10_000;
+
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add( "spring.data.redis.host", redis::getHost );
         registry.add( "spring.data.redis.port", () -> redis.getMappedPort( 6379 ) );
-        registry.add( "app.event-duration-millis", () -> 10_000 );
+        registry.add( "app.event-duration-millis", () -> EVENT_DURATION );
     }
 
     @AfterEach
@@ -89,9 +91,16 @@ public class EventMapIntTest {
     }
 
     @Test
+    public void deleteEventThrowsWhenEventTooYoung() {
+        String event = "testEvent";
+        long oldTime = Instant.now().toEpochMilli() - EVENT_DURATION + 5; // event 5 ms too young
+        Assertions.assertThrows(IllegalArgumentException.class , () -> eventMap.deleteEvent(event, oldTime));
+    }
+
+    @Test
     public void deleteEventReturnsFalseOnAbsentEvent() {
         String event = "testEvent";
-        long oldTime = Instant.now().toEpochMilli();
+        long oldTime = Instant.now().toEpochMilli() - EVENT_DURATION;
         boolean didDelete = eventMap.deleteEvent(event, oldTime);
         Assertions.assertFalse(didDelete);
     }
@@ -99,7 +108,7 @@ public class EventMapIntTest {
     @Test
     public void deleteEventDeletesWhenIsLatestEvent() {
         String event = "testEvent";
-        long oldTime = Instant.now().toEpochMilli();
+        long oldTime = Instant.now().toEpochMilli() - EVENT_DURATION;
         eventMap.put(event, Long.toString(oldTime));
         boolean didDelete = eventMap.deleteEvent(event, oldTime);
         Assertions.assertTrue(didDelete, "expected return value");
@@ -110,7 +119,7 @@ public class EventMapIntTest {
     public void deleteEventDeletesWhenEarlierEventInMap() {
         // note this is a condition that could indicate a problem, but making test to document behavior
         String event = "testEvent";
-        long eventTime = Instant.now().toEpochMilli();
+        long eventTime = Instant.now().toEpochMilli() - EVENT_DURATION;
         eventMap.put(event, Long.toString(eventTime-1)); // earlier time
         boolean didDelete = eventMap.deleteEvent(event, eventTime);
         Assertions.assertTrue(didDelete, "expected return value");
@@ -120,8 +129,8 @@ public class EventMapIntTest {
     @Test
     public void deleteEventDoesNotDeleteWhenLaterEventInMap() {
         String event = "testEvent";
-        long eventTime = Instant.now().toEpochMilli();
-        eventMap.put(event, Long.toString(eventTime+1) ); // later time
+        long eventTime = Instant.now().toEpochMilli() - EVENT_DURATION;
+        eventMap.put(event, Long.toString(eventTime+5) ); // later time
         boolean didDelete = eventMap.deleteEvent(event, eventTime);
             Assertions.assertFalse(didDelete, "expected return value");
         Assertions.assertNotNull(eventMap.get(event));

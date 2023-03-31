@@ -2,7 +2,7 @@ package com.ericgha.service;
 
 import com.ericgha.config.RetryConfig;
 import com.ericgha.dao.EventMap;
-import exception.WriteConflictException;
+import exception.DirtyStateException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,16 +36,16 @@ public class EventMapServiceTest {
     @Test
     @DisplayName( "Called num-attempts times and throws when all invocations fail" )
     public void tryAddEventAllInvocationsFail() {
-        when( eventMapMock.putEvent( Mockito.anyString(), Mockito.anyLong() ) ).thenThrow( new WriteConflictException( "Dummy Exception" ) );
-        Assertions.assertThrows( WriteConflictException.class, () -> eventMapService.tryAddEvent( "testEvent", 123 ) );
+        when( eventMapMock.putEvent( Mockito.anyString(), Mockito.anyLong() ) ).thenThrow( new DirtyStateException( "Dummy Exception" ) );
+        Assertions.assertThrows( DirtyStateException.class, () -> eventMapService.tryAddEvent( "testEvent", 123 ) );
         Mockito.verify( eventMapMock, times( 5 ) ).putEvent( Mockito.anyString(), Mockito.anyLong() );
     }
 
     @Test
     @DisplayName( "Calls DAO 3 times when first two throw and third succeeds and returns expected" )
     public void tryAddEventReturnsExpectedWhenThirdSucceeds() {
-        Mockito.doThrow(new WriteConflictException())
-                .doThrow( new WriteConflictException() )
+        Mockito.doThrow(new DirtyStateException())
+                .doThrow( new DirtyStateException() )
                 .doReturn(true)
                 .when( eventMapMock )
                 .putEvent( Mockito.anyString(), Mockito.anyLong() );

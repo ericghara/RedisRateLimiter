@@ -1,6 +1,7 @@
 package com.ericgha.dao;
 
 import com.ericgha.dto.EventTime;
+import exception.DirtyStateException;
 import jakarta.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +13,6 @@ import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.stereotype.Repository;
 
 import java.util.Arrays;
-import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -35,15 +35,15 @@ public class EventQueue {
     }
 
     @Nullable
-    public EventTime tryPoll(long thresholdTime) throws ConcurrentModificationException {
+    public EventTime tryPoll(long thresholdTime) throws DirtyStateException {
         TimeConditionalPoll conditionalPoll = new TimeConditionalPoll( queueId, thresholdTime );
         List<EventTime> polled = eventTimeRedisTemplate.execute( conditionalPoll );
         if (polled.size() != 1) {
             if (polled.size() > 1) { // Something is very broken if this occurs
-                log.warn( "Too many commands results: {}", polled );
+                log.warn( "Too many commands. Results: {}", polled );
                 throw new IllegalStateException( "TimeConditionalPoll's transaction executed too many commands" );
             }
-            throw new ConcurrentModificationException( String.format( "Queue: %s was modified while polling.", queueId ) );
+            throw new DirtyStateException( String.format( "Queue: %s was modified while polling.", queueId ) );
         }
         return polled.get( 0 );
     }
@@ -85,6 +85,10 @@ public class EventQueue {
         private final long thresholdTime;
         private final Logger log = LoggerFactory.getLogger( this.getClass() );
 
+        /**
+         * @param key           queueId
+         * @param thresholdTime latest time that should trigger a poll younger items will not be polled.
+         */
         public TimeConditionalPoll(String key, long thresholdTime) {
             this.thresholdTime = thresholdTime;
             this.key = key;
