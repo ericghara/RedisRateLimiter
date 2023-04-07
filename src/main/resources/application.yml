@@ -19,8 +19,15 @@ app:
       num-attempts: 3
       interval: 3
     num-workers: 2
+  time-sync:
+    num-frames: 20
+  web-socket:
+    prefix:
+      application: /app
+      client: /topic
+
 
 logging:
   level:
     org:
-#      springframework: debug
+      springframework: debug
