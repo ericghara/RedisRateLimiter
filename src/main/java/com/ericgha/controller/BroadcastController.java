@@ -1,5 +1,7 @@
 package com.ericgha.controller;
 
+import com.ericgha.dto.EventTime;
+import com.ericgha.dto.message.AddedEventMessage;
 import com.ericgha.service.TimeSyncService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -32,10 +34,21 @@ public class BroadcastController {
         timeSyncService.beginBroadcast( prefix );
     }
 
+    /**
+     * Probably want to delete, just a http rest endpoint that triggers broadcast of server time.
+     * used for testing
+     */
     @RequestMapping(path = "/time", method = RequestMethod.POST)
     public void time() {
         String path = String.format( "%s/%s", clientPrefix, "time" );
         this.msgTemplate.convertAndSend( path, Instant.now().toEpochMilli() );
+    }
+
+    @RequestMapping(path = "/event", method = RequestMethod.POST)
+    public void event() {
+        String path = String.format( "%s/%s", clientPrefix, "event" );
+        AddedEventMessage eventMsg = new AddedEventMessage( Instant.now().toEpochMilli(), new EventTime("event", 0) );
+        this.msgTemplate.convertAndSend( path, eventMsg );
     }
 
 }

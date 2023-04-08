@@ -1,4 +1,4 @@
-package com.ericgha.service;
+package com.ericgha.service.data;
 
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
@@ -37,6 +37,10 @@ public class EventQueueService {
     @Nullable
     public EventTime tryPoll(long thresholdTime) throws DirtyStateException {
         return retryTemplate.execute( _context -> eventQueue.tryPoll( thresholdTime ) );
+    }
+
+    public long size() {
+        return eventQueue.size();
     }
 
 }

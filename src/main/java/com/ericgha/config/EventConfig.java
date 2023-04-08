@@ -1,7 +1,7 @@
 package com.ericgha.config;
 
-import com.ericgha.service.EventExpiryService;
-import com.ericgha.service.EventQueueService;
+import com.ericgha.service.data.EventExpiryService;
+import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
 import com.ericgha.service.event_consumer.NoOpEventConsumer;
 import org.springframework.beans.factory.annotation.Autowired;

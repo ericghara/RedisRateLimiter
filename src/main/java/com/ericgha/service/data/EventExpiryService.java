@@ -1,9 +1,8 @@
-package com.ericgha.service;
+package com.ericgha.service.data;
 
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
 import com.ericgha.service.event_consumer.EventConsumer;
-import com.ericgha.service.event_consumer.NoOpEventConsumer;
 import exception.DirtyStateException;
 import jakarta.annotation.Nullable;
 import org.slf4j.Logger;

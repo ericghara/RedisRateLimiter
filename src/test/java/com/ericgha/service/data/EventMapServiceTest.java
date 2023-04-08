@@ -1,4 +1,4 @@
-package com.ericgha.service;
+package com.ericgha.service.data;
 
 import com.ericgha.config.RetryConfig;
 import com.ericgha.dao.EventMap;
@@ -34,19 +34,20 @@ public class EventMapServiceTest {
     }
 
     @Test
-    @DisplayName( "Called num-attempts times and throws when all invocations fail" )
+    @DisplayName("Called num-attempts times and throws when all invocations fail")
     public void tryAddEventAllInvocationsFail() {
-        when( eventMapMock.putEvent( Mockito.anyString(), Mockito.anyLong() ) ).thenThrow( new DirtyStateException( "Dummy Exception" ) );
+        when( eventMapMock.putEvent( Mockito.anyString(), Mockito.anyLong() ) ).thenThrow(
+                new DirtyStateException( "Dummy Exception" ) );
         Assertions.assertThrows( DirtyStateException.class, () -> eventMapService.tryAddEvent( "testEvent", 123 ) );
         Mockito.verify( eventMapMock, times( 5 ) ).putEvent( Mockito.anyString(), Mockito.anyLong() );
     }
 
     @Test
-    @DisplayName( "Calls DAO 3 times when first two throw and third succeeds and returns expected" )
+    @DisplayName("Calls DAO 3 times when first two throw and third succeeds and returns expected")
     public void tryAddEventReturnsExpectedWhenThirdSucceeds() {
-        Mockito.doThrow(new DirtyStateException())
+        Mockito.doThrow( new DirtyStateException() )
                 .doThrow( new DirtyStateException() )
-                .doReturn(true)
+                .doReturn( true )
                 .when( eventMapMock )
                 .putEvent( Mockito.anyString(), Mockito.anyLong() );
         Assertions.assertTrue( eventMapService.tryAddEvent( "testEvent", 123 ) );
@@ -54,12 +55,12 @@ public class EventMapServiceTest {
     }
 
     @Test
-    @DisplayName( "tryDeleteEvent calls EventMap#deleteEvent" )
+    @DisplayName("tryDeleteEvent calls EventMap#deleteEvent")
     public void tryDeleteEventCallsDeleteEvent() {
-        Mockito.doReturn(true)
-                .when(eventMapMock)
-                .deleteEvent(  Mockito.anyString(), Mockito.anyLong() );
+        Mockito.doReturn( true )
+                .when( eventMapMock )
+                .deleteEvent( Mockito.anyString(), Mockito.anyLong() );
         eventMapService.tryDeleteEvent( "testEvent", 123 );
-        Mockito.verify(eventMapMock).deleteEvent( Mockito.anyString(), Mockito.anyLong() );
+        Mockito.verify( eventMapMock ).deleteEvent( Mockito.anyString(), Mockito.anyLong() );
     }
 }
