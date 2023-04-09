@@ -5,26 +5,22 @@ import exception.DirtyStateException;
 import jakarta.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
-import org.springframework.stereotype.Repository;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-@Repository
 public class EventQueue {
 
     private final RedisTemplate<String, EventTime> eventTimeRedisTemplate;
     private final String queueId;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
 
-    @Autowired
     public EventQueue(RedisTemplate<String, EventTime> eventTimeRedisTemplate) {
         this( eventTimeRedisTemplate, UUID.randomUUID().toString() );
     }

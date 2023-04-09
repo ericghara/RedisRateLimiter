@@ -4,6 +4,7 @@ import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,11 +17,11 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-// should not return null b/c not used in pipeline or transaction (see documentation)
+
 import java.util.UUID;
 
 @Testcontainers
-@SpringBootTest(classes = {EventQueue.class, RedisConfig.class})
+@SpringBootTest(classes = {RedisConfig.class})
 public class EventQueueIntTest {
 
     @Container
@@ -32,13 +33,17 @@ public class EventQueueIntTest {
     RedisConnectionFactory connectionFactory;
     @Autowired
     RedisTemplate<String, EventTime> eventTimeRedisTemplate;
-    @Autowired
     EventQueue eventQueue;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add( "spring.data.redis.host", redis::getHost );
         registry.add( "spring.data.redis.port", () -> redis.getMappedPort( 6379 ) );
+    }
+
+    @BeforeEach
+    void before() {
+        eventQueue = new EventQueue( eventTimeRedisTemplate );
     }
 
     @AfterEach

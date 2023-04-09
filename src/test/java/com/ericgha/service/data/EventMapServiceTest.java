@@ -1,26 +1,40 @@
 package com.ericgha.service.data;
 
-import com.ericgha.config.RetryConfig;
+import com.ericgha.config.OnlyOnceEventConfig;
+import com.ericgha.config.RedisConfig;
+import com.ericgha.config.WebSocketConfig;
 import com.ericgha.dao.EventMap;
+import com.ericgha.dto.EventTime;
 import exception.DirtyStateException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest(classes = {RetryConfig.class, EventMapService.class})
+@SpringBootTest(classes = {EventMapService.class, RedisConfig.class, OnlyOnceEventConfig.class, WebSocketConfig.class})
 public class EventMapServiceTest {
 
     @MockBean
     EventMap eventMapMock;
+
+    @MockBean
+    StringRedisTemplate stringRedisTemplate;
+
+    @MockBean
+    @Qualifier("eventTimeRedisTemplate")
+    RedisTemplate<String, EventTime> eventTimeRedisTemplate;
+
 
     @Autowired
     EventMapService eventMapService;
@@ -31,6 +45,7 @@ public class EventMapServiceTest {
         registry.add( "app.redis.retry.initial-interval", () -> 1 );
         registry.add( "app.redis.retry.multiplier", () -> 1.001 );
         registry.add( "app.redis.retry.num-attempts", () -> 5 );
+        registry.add( "app.redis.mock", () -> true ); // disable redis connection
     }
 
     @Test

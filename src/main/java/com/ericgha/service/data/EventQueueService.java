@@ -4,17 +4,14 @@ import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
 import exception.DirtyStateException;
 import jakarta.annotation.Nullable;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.retry.support.RetryTemplate;
-import org.springframework.stereotype.Service;
 
-@Service
 public class EventQueueService {
 
     private final EventQueue eventQueue;
     private final RetryTemplate retryTemplate;
 
-    public EventQueueService(EventQueue eventQueue, @Qualifier("eventQueueRetryTemplate") RetryTemplate retryTemplate) {
+    public EventQueueService(EventQueue eventQueue, RetryTemplate retryTemplate) {
         this.eventQueue = eventQueue;
         this.retryTemplate = retryTemplate;
     }
@@ -28,10 +25,10 @@ public class EventQueueService {
     }
 
     /**
-     *
      * @param thresholdTime {@code time} of latest event that should be polled, younger objects will remain on queue
      * @return EventTime meeting {@code threholdTime} condition or {@code null}
-     * @throws DirtyStateException if after retries still could not poll the queue (Likely causes contention or response timeout)
+     * @throws DirtyStateException if after retries still could not poll the queue (Likely causes contention or response
+     *                             timeout)
      * @see RetryTemplate
      */
     @Nullable
@@ -40,6 +37,7 @@ public class EventQueueService {
     }
 
     public long size() {
+        // todo use retry template
         return eventQueue.size();
     }
 

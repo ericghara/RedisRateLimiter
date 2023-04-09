@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -21,6 +22,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisConfig {
 
     @Bean
+    @ConditionalOnProperty(name="app.redis.mock", havingValue = "false", matchIfMissing = true)
     public RedisConnectionFactory redisConnectionFactory(@Value("${spring.data.redis.host}") String redisHostname,
                                                          @Value("${spring.data.redis.port}") Integer redisPort) {
         // not currently required as all properties currently are autoconfigurable, but leaving open
@@ -32,6 +34,7 @@ public class RedisConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(name="app.redis.mock", havingValue = "false", matchIfMissing = true)
     StringRedisTemplate stringRedisTemplate(RedisConnectionFactory redisConnectionFactory) {
         StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory( redisConnectionFactory );
@@ -53,7 +56,8 @@ public class RedisConfig {
     }
 
     @Bean
-    @Qualifier("EventTimeRedisTemplate")
+    @Qualifier("eventTimeRedisTemplate")
+    @ConditionalOnProperty(name="app.redis.mock", havingValue = "false", matchIfMissing = true)
     RedisTemplate<String, EventTime> eventTimeRedisTemplate(RedisConnectionFactory redisConnectionFactory,
                                                             StringRedisSerializer stringRedisSerializer,
                                                             Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {

@@ -1,8 +1,8 @@
 package com.ericgha.service.data;
 
+import com.ericgha.config.OnlyOnceEventConfig;
 import com.ericgha.config.RedisConfig;
-import com.ericgha.config.RetryConfig;
-import com.ericgha.dao.EventQueue;
+import com.ericgha.config.WebSocketConfig;
 import com.ericgha.dto.EventTime;
 import com.ericgha.service.event_consumer.InMemoryEventStore;
 import org.junit.jupiter.api.AfterEach;
@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 @Testcontainers
-@SpringBootTest(classes = {RedisConfig.class, RetryConfig.class, EventQueueService.class, EventQueue.class})
+@SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class, WebSocketConfig.class})
 class EventExpiryServiceIntTest {
 
     @Container
