@@ -18,6 +18,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.util.List;
 import java.util.UUID;
 
 @Testcontainers
@@ -111,5 +112,17 @@ public class EventQueueIntTest {
         Assertions.assertEquals( event, eventQueue.tryPoll( threshold ) );
     }
 
+    @Test
+    public void getRangeEmptyQueue() {
+        Assertions.assertEquals( List.of(), eventQueue.getRange(0, -1) );
+    }
 
+    @Test
+    public void getAllNonEmptyQueue() {
+        EventTime event0 = new EventTime( "Test Event0", 0 );
+        EventTime event1 = new EventTime( "Test Event1", 1 );
+        List<EventTime> expected = List.of( event0, event1 );
+        expected.forEach( eventQueue::offer );
+        Assertions.assertEquals( expected, eventQueue.getRange(0, -1) );
+    }
 }

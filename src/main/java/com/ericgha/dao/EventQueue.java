@@ -53,6 +53,11 @@ public class EventQueue {
         return eventTimeRedisTemplate.opsForList().rightPush( queueId, event );
     }
 
+    public List<EventTime> getRange(long start, long end) {
+        List<EventTime> eventTimes = eventTimeRedisTemplate.opsForList().range( queueId, start, end );
+        return Objects.nonNull( eventTimes ) ? eventTimes : List.of();
+    }
+
     public long size() {
         // should not return null b/c not used in pipeline or transaction (see documentation)
         return eventTimeRedisTemplate.opsForList().size( queueId );

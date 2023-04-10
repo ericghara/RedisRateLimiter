@@ -6,6 +6,8 @@ import exception.DirtyStateException;
 import jakarta.annotation.Nullable;
 import org.springframework.retry.support.RetryTemplate;
 
+import java.util.List;
+
 public class EventQueueService {
 
     private final EventQueue eventQueue;
@@ -34,6 +36,14 @@ public class EventQueueService {
     @Nullable
     public EventTime tryPoll(long thresholdTime) throws DirtyStateException {
         return retryTemplate.execute( _context -> eventQueue.tryPoll( thresholdTime ) );
+    }
+
+    public List<EventTime> getRange(long start, long end) throws DirtyStateException {
+        return retryTemplate.execute( _context -> eventQueue.getRange( start, end ) );
+    }
+
+    public List<EventTime> getAll() throws DirtyStateException {
+        return this.getRange( 0, -1 );
     }
 
     public long size() {
