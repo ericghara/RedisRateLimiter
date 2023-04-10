@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WS Testing</title>
+  <!--
+    JSPM Generator Import Map
+    Edit URL: https://generator.jspm.io/#U2NgYGBkDM0rySzJSU1hcCguyc8t0AeTWcUO5noGega6SakliaYAYTzJAykA
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@stomp/stompjs": "https://ga.jspm.io/npm:@stomp/stompjs@7.0.0/esm6/index.js"
+    }
+  }
+
+
+
+  </script>
+  <!-- ES Module Shims: Import maps polyfill for modules browsers without import maps support (all except Chrome 89+) -->
+  <script
+          async
+          src="https://ga.jspm.io/npm:es-module-shims@1.5.1/dist/es-module-shims.js"
+          crossorigin="anonymous"
+  ></script>
+
+  <script type="module">
+      import {Client} from '@stomp/stompjs';
+
+      const connectAction = () => {
+          doTimeSync();
+          logEvent();
+      }
+
+      const doTimeSync = async () => {
+          let count = 20;
+          let skew = -Infinity;
+          let subscription = client.subscribe('/topic/time', message => {
+              skew = Math.max(skew, Number(message.body) - Date.now())
+              console.log(`Received: ${message.body}`);
+              if (--count === 0) {
+                  subscription.unsubscribe();
+                  console.log("Clock Skew: " + skew + " ms");
+              }
+          });
+          client.publish({destination: "/app/time"});
+      }
+
+      const logEvent = () => {
+          let subscription = client.subscribe('/topic/only-once', message => {
+                  let messageJson = JSON.parse(message.body);
+                  console.log(`${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.eventTime)}`);
+              }
+          )
+      }
+
+
+      const client = new Client({
+          brokerURL: 'ws://localhost:8080/ws',
+          onConnect: connectAction,
+          // client.publish({ destination: '/topic/test01', body: 'First Message' });
+      })
+      client.activate();
+  </script>
+
+  <!--  <script>-->
+  <!--    var socket = new WebSocket('ws://' + "localhost:8080" + '/ws');-->
+  <!--    socket.onopen = function () {-->
+  <!--      console.log(-->
+  <!--              'WebSocket connection is open.');-->
+  <!--    };-->
+  <!--    socket.onmessage = function (message) {-->
+  <!--      var text = "";-->
+  <!--      text += message.data + "\n";-->
+  <!--      document.getElementById("positions").innerText = text;-->
+  <!--    };-->
+  <!--    socket.onclose = function () {-->
+  <!--      console.log('WebSocket connection closed.');-->
+  <!--    };-->
+  <!--  </script>-->
+</head>
+<body>

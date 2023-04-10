@@ -4,6 +4,7 @@ import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,11 +17,12 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-// should not return null b/c not used in pipeline or transaction (see documentation)
+
+import java.util.List;
 import java.util.UUID;
 
 @Testcontainers
-@SpringBootTest(classes = {EventQueue.class, RedisConfig.class})
+@SpringBootTest(classes = {RedisConfig.class})
 public class EventQueueIntTest {
 
     @Container
@@ -32,13 +34,17 @@ public class EventQueueIntTest {
     RedisConnectionFactory connectionFactory;
     @Autowired
     RedisTemplate<String, EventTime> eventTimeRedisTemplate;
-    @Autowired
     EventQueue eventQueue;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add( "spring.data.redis.host", redis::getHost );
         registry.add( "spring.data.redis.port", () -> redis.getMappedPort( 6379 ) );
+    }
+
+    @BeforeEach
+    void before() {
+        eventQueue = new EventQueue( eventTimeRedisTemplate );
     }
 
     @AfterEach
@@ -106,5 +112,17 @@ public class EventQueueIntTest {
         Assertions.assertEquals( event, eventQueue.tryPoll( threshold ) );
     }
 
+    @Test
+    public void getRangeEmptyQueue() {
+        Assertions.assertEquals( List.of(), eventQueue.getRange(0, -1) );
+    }
 
+    @Test
+    public void getAllNonEmptyQueue() {
+        EventTime event0 = new EventTime( "Test Event0", 0 );
+        EventTime event1 = new EventTime( "Test Event1", 1 );
+        List<EventTime> expected = List.of( event0, event1 );
+        expected.forEach( eventQueue::offer );
+        Assertions.assertEquals( expected, eventQueue.getRange(0, -1) );
+    }
 }

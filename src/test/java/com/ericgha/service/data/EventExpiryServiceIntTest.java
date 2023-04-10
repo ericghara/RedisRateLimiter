@@ -1,8 +1,8 @@
-package com.ericgha.service;
+package com.ericgha.service.data;
 
+import com.ericgha.config.OnlyOnceEventConfig;
 import com.ericgha.config.RedisConfig;
-import com.ericgha.config.RetryConfig;
-import com.ericgha.dao.EventQueue;
+import com.ericgha.config.WebSocketConfig;
 import com.ericgha.dto.EventTime;
 import com.ericgha.service.event_consumer.InMemoryEventStore;
 import org.junit.jupiter.api.AfterEach;
@@ -26,19 +26,19 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 @Testcontainers
-@SpringBootTest(classes = {RedisConfig.class, RetryConfig.class, EventQueueService.class, EventQueue.class})
+@SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class, WebSocketConfig.class})
 class EventExpiryServiceIntTest {
 
     @Container
-    private static final GenericContainer<?> redis = new GenericContainer<>( DockerImageName.parse( "redis:7" ) ).withExposedPorts( 6379 ).withReuse( true );
+    private static final GenericContainer<?> redis =
+            new GenericContainer<>( DockerImageName.parse( "redis:7" ) ).withExposedPorts( 6379 ).withReuse( true );
+    private static final int DELAY_MILLI = 10;  // delay period for queue
     @Autowired
     RedisConnectionFactory connectionFactory;
-
     @Autowired
     EventQueueService queueService;
     InMemoryEventStore eventStore = new InMemoryEventStore();
     EventExpiryService expiryService;
-    private static final int DELAY_MILLI = 10;  // delay period for queue
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -65,20 +65,22 @@ class EventExpiryServiceIntTest {
     @Timeout(1)
     void pollsEvents() throws InterruptedException {
         for (int i = 0; i < 20; i++) {
-            Thread.sleep(1, 500);
+            Thread.sleep( 1, 500 );
             queueService.offer( Integer.toString( i ), Instant.now().toEpochMilli() );
         }
         Thread.sleep( 250 );
         for (int i = 20; i < 100; i++) {
-            Thread.sleep(1, 500_000);
+            Thread.sleep( 1, 500_000 );
             queueService.offer( Integer.toString( i ), Instant.now().toEpochMilli() );
         }
         Thread.sleep( 300 );
         List<Integer> expectedEvents = IntStream.range( 0, 100 ).boxed().toList();
-        List<Integer> foundEvents = eventStore.getAllEvents().keySet().stream().map( EventTime::event ).map(Integer::parseInt).sorted().toList();
+        List<Integer> foundEvents =
+                eventStore.getAllEvents().keySet().stream().map( EventTime::event ).map( Integer::parseInt ).sorted()
+                        .toList();
         Assertions.assertEquals( expectedEvents, foundEvents, "All events were polled" );
         long offBy100ms = eventStore.getAllEvents().entrySet().stream()
-                .map( e -> e.getValue() - DELAY_MILLI - e.getKey().time() ).filter(d -> d > 100).count();
-        Assertions.assertTrue(offBy100ms <= 3, "97% polled within 100ms of threshold delay");
+                .map( e -> e.getValue() - DELAY_MILLI - e.getKey().time() ).filter( d -> d > 100 ).count();
+        Assertions.assertTrue( offBy100ms <= 3, "97% polled within 100ms of threshold delay" );
     }
 }

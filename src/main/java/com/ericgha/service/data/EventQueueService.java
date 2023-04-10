@@ -1,20 +1,19 @@
-package com.ericgha.service;
+package com.ericgha.service.data;
 
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
 import exception.DirtyStateException;
 import jakarta.annotation.Nullable;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.retry.support.RetryTemplate;
-import org.springframework.stereotype.Service;
 
-@Service
+import java.util.List;
+
 public class EventQueueService {
 
     private final EventQueue eventQueue;
     private final RetryTemplate retryTemplate;
 
-    public EventQueueService(EventQueue eventQueue, @Qualifier("eventQueueRetryTemplate") RetryTemplate retryTemplate) {
+    public EventQueueService(EventQueue eventQueue, RetryTemplate retryTemplate) {
         this.eventQueue = eventQueue;
         this.retryTemplate = retryTemplate;
     }
@@ -28,15 +27,27 @@ public class EventQueueService {
     }
 
     /**
-     *
      * @param thresholdTime {@code time} of latest event that should be polled, younger objects will remain on queue
      * @return EventTime meeting {@code threholdTime} condition or {@code null}
-     * @throws DirtyStateException if after retries still could not poll the queue (Likely causes contention or response timeout)
+     * @throws DirtyStateException if after retries still could not poll the queue (Likely causes contention or response
+     *                             timeout)
      * @see RetryTemplate
      */
     @Nullable
     public EventTime tryPoll(long thresholdTime) throws DirtyStateException {
         return retryTemplate.execute( _context -> eventQueue.tryPoll( thresholdTime ) );
+    }
+
+    public List<EventTime> getRange(long start, long end) throws DirtyStateException {
+        return retryTemplate.execute( _context -> eventQueue.getRange( start, end ) );
+    }
+
+    public List<EventTime> getAll() throws DirtyStateException {
+        return this.getRange( 0, -1 );
+    }
+
+    public long size() {
+        return retryTemplate.execute( _context -> eventQueue.size() );
     }
 
 }

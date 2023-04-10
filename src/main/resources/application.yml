@@ -5,22 +5,39 @@ spring:
       client-type: lettuce
       host: "localhost"
       port: 6379
+      password: "password"
 app:
-  event-duration-millis: 10000
-  event-map:
-    retry:
-      # configured to do 5 attempts (t = 0, 0.5, 1.25, 2.375, 4.063 sec)
-      initial-interval: 500
-      multiplier: 1.5
-      num-attempts: 5
-  event-queue:
-    retry:
-      # 3 attempts with 3ms delay between each
-      num-attempts: 3
-      interval: 3
-    num-workers: 2
+  web-socket:
+    prefix:
+      application: /app
+      client: /topic
+  once-only-event:
+    event-duration-millis: 10000
+    max-events: 50
+    web-socket:
+      element: "only-once"
+    event-map:
+      key-prefix: "only-once"
+      retry:
+        # configured to do 5 attempts (t = 0, 0.5, 1.25, 2.375, 4.063 sec)
+        initial-interval: 500
+        multiplier: 1.5
+        num-attempts: 5
+    event-queue:
+      queue-id: "only-once-queue"
+      retry:
+        # 3 attempts with 3ms delay between each
+        num-attempts: 3
+        interval: 3
+      num-workers: 2
+  time-sync:
+    num-frames: 20
+  redis:
+    # for testing
+    mock: False
+
 
 logging:
   level:
     org:
-#      springframework: debug
+      springframework: debug
