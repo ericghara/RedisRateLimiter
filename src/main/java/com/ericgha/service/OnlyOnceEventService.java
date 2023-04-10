@@ -16,17 +16,17 @@ import java.time.Instant;
 
 public class OnlyOnceEventService {
 
-    private final String prefix;
+    private final String messagePrefix;
     private final long maxEvents;
     private final SimpMessagingTemplate msgTemplate;
     private final EventQueueService eventQueueService;
     private final EventMapService eventMapService;
     private final Logger log;
 
-    public OnlyOnceEventService(String prefix, long maxEvents, SimpMessagingTemplate msgTemplate,
+    public OnlyOnceEventService(String messagePrefix, long maxEvents, SimpMessagingTemplate msgTemplate,
                                 EventQueueService eventQueueService, EventMapService eventMapService) {
         this.log = LoggerFactory.getLogger( this.getClass().getName() );
-        this.prefix = prefix;
+        this.messagePrefix = messagePrefix;
         this.maxEvents = maxEvents;
         this.msgTemplate = msgTemplate;
         this.eventQueueService = eventQueueService;
@@ -53,7 +53,7 @@ public class OnlyOnceEventService {
         long timestamp = Instant.now().toEpochMilli();
         if (success) {
             AddedEventMessage addedEventMessage = new AddedEventMessage( timestamp, eventTime );
-            msgTemplate.convertAndSend( prefix, addedEventMessage );
+            msgTemplate.convertAndSend( messagePrefix, addedEventMessage );
             return HttpStatus.CREATED;
         }
         return HttpStatus.CONFLICT;
@@ -68,9 +68,17 @@ public class OnlyOnceEventService {
             }
             long time = Instant.now().toEpochMilli();
             PublishedEventMessage pubEventMessage = new PublishedEventMessage( time, eventTime );
-            msgTemplate.convertAndSend( prefix, pubEventMessage );
+            msgTemplate.convertAndSend( messagePrefix, pubEventMessage );
         };
 
+    }
+
+    public long maxEvents() {
+        return this.maxEvents;
+    }
+
+    public String messagePrefix() {
+        return messagePrefix;
     }
 
 
