@@ -35,7 +35,7 @@ public class EventMap {
         this.eventDurationMillis = millis;
     }
 
-    // Convenience method for testing.
+    // Convenience method for testing.  Returns previous key value or null
     String put(String key, String value) {
         return valueOps.getAndSet( key, value );
     }

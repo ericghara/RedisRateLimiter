@@ -7,22 +7,23 @@ import com.ericgha.dao.EventMap;
 import com.ericgha.dto.EventTime;
 import exception.DirtyStateException;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest(classes = {EventMapService.class, RedisConfig.class, OnlyOnceEventConfig.class, WebSocketConfig.class})
+@SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class, WebSocketConfig.class})
 public class EventMapServiceTest {
 
     @MockBean
@@ -36,7 +37,6 @@ public class EventMapServiceTest {
     RedisTemplate<String, EventTime> eventTimeRedisTemplate;
 
 
-    @Autowired
     EventMapService eventMapService;
 
     @DynamicPropertySource
@@ -46,6 +46,12 @@ public class EventMapServiceTest {
         registry.add( "app.redis.retry.multiplier", () -> 1.001 );
         registry.add( "app.redis.retry.num-attempts", () -> 5 );
         registry.add( "app.redis.mock", () -> true ); // disable redis connection
+    }
+
+    @BeforeEach
+    void before(@Qualifier("eventMapRetry") RetryTemplate retryTemplate) {
+        this.eventMapService = new EventMapService( eventMapMock, "prefix", retryTemplate );
+
     }
 
     @Test
@@ -70,6 +76,17 @@ public class EventMapServiceTest {
     }
 
     @Test
+    @DisplayName("tryAddEvent calls EventMap#putEvent with the expected key")
+    public void tryAddEventUsesExpectedKey() {
+        Mockito.doReturn( true ).when( eventMapMock ).putEvent( Mockito.anyString(), Mockito.anyLong() );
+        String event = "testEvent";
+        long timeMilli = 123;
+        eventMapService.tryAddEvent( "testEvent", timeMilli );
+        String expectedKey = eventMapService.keyPrefix() + eventMapService.delimiter() + event;
+        Mockito.verify( eventMapMock ).putEvent( expectedKey, timeMilli );
+    }
+
+    @Test
     @DisplayName("tryDeleteEvent calls EventMap#deleteEvent")
     public void tryDeleteEventCallsDeleteEvent() {
         Mockito.doReturn( true )
@@ -77,5 +94,18 @@ public class EventMapServiceTest {
                 .deleteEvent( Mockito.anyString(), Mockito.anyLong() );
         eventMapService.tryDeleteEvent( "testEvent", 123 );
         Mockito.verify( eventMapMock ).deleteEvent( Mockito.anyString(), Mockito.anyLong() );
+    }
+
+    @Test
+    @DisplayName("tryDeleteEvent calls EventMap#deleteEvent with the expected key")
+    public void tryDeleteEventUsesExpectedKey() {
+        Mockito.doReturn( true )
+                .when( eventMapMock )
+                .deleteEvent( Mockito.anyString(), Mockito.anyLong() );
+        String event = "testEvent";
+        long timeMilli = 123;
+        eventMapService.tryDeleteEvent( "testEvent", timeMilli );
+        String expectedKey = eventMapService.keyPrefix() + eventMapService.delimiter() + event;
+        Mockito.verify( eventMapMock ).deleteEvent( expectedKey, timeMilli );
     }
 }

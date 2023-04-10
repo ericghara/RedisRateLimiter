@@ -37,8 +37,7 @@ public class EventQueueService {
     }
 
     public long size() {
-        // todo use retry template
-        return eventQueue.size();
+        return retryTemplate.execute( _context -> eventQueue.size() );
     }
 
 }

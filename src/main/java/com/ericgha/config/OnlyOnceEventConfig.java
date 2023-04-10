@@ -63,9 +63,10 @@ public class OnlyOnceEventConfig {
     @Bean
     @Qualifier("onceOnlyEventMapService")
     EventMapService onceOnlyEventMap(@Value("${app.once-only-event.event-duration-millis}") long eventDuration,
+                                     @Value("${app.once-only-event.event-map.key-prefix}") String keyPrefix,
                                      @Qualifier("eventMapRetryTemplate") RetryTemplate retryTemplate) {
         EventMap eventMap = new EventMap( stringRedisTemplate, eventDuration );
-        return new EventMapService( eventMap, retryTemplate );
+        return new EventMapService( eventMap, keyPrefix, retryTemplate );
     }
 
     @Bean

@@ -16,14 +16,15 @@ import java.time.Instant;
 
 public class OnlyOnceEventService {
 
-    String prefix;
-    long maxEvents;
-    SimpMessagingTemplate msgTemplate;
-    EventQueueService eventQueueService;
-    EventMapService eventMapService;
-    Logger log;
+    private final String prefix;
+    private final long maxEvents;
+    private final SimpMessagingTemplate msgTemplate;
+    private final EventQueueService eventQueueService;
+    private final EventMapService eventMapService;
+    private final Logger log;
 
-    public OnlyOnceEventService(String prefix, long maxEvents, SimpMessagingTemplate msgTemplate, EventQueueService eventQueueService, EventMapService eventMapService) {
+    public OnlyOnceEventService(String prefix, long maxEvents, SimpMessagingTemplate msgTemplate,
+                                EventQueueService eventQueueService, EventMapService eventMapService) {
         this.log = LoggerFactory.getLogger( this.getClass().getName() );
         this.prefix = prefix;
         this.maxEvents = maxEvents;
