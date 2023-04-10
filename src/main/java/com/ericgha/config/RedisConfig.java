@@ -10,6 +10,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisPassword;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -22,19 +23,24 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisConfig {
 
     @Bean
-    @ConditionalOnProperty(name="app.redis.mock", havingValue = "false", matchIfMissing = true)
+    @ConditionalOnProperty(name = "app.redis.mock", havingValue = "false", matchIfMissing = true)
     public RedisConnectionFactory redisConnectionFactory(@Value("${spring.data.redis.host}") String redisHostname,
+                                                         @Value("${spring.data.redis.password}") String password,
                                                          @Value("${spring.data.redis.port}") Integer redisPort) {
         // not currently required as all properties currently are autoconfigurable, but leaving open
         // for future customization.
+        RedisPassword redisPassword = password.isBlank() ? RedisPassword.none() : RedisPassword.of( password );
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration( redisHostname, redisPort );
+        config.setPassword( redisPassword );
+
         LettuceClientConfiguration clientConfiguration = LettuceClientConfiguration.builder()
-                .clientName( redisHostname ).build();
+                .clientName( redisHostname )
+                .build();
         return new LettuceConnectionFactory( config, clientConfiguration );
     }
 
     @Bean
-    @ConditionalOnProperty(name="app.redis.mock", havingValue = "false", matchIfMissing = true)
+    @ConditionalOnProperty(name = "app.redis.mock", havingValue = "false", matchIfMissing = true)
     StringRedisTemplate stringRedisTemplate(RedisConnectionFactory redisConnectionFactory) {
         StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory( redisConnectionFactory );
@@ -46,8 +52,8 @@ public class RedisConfig {
     @Bean
     Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer() {
         ObjectMapper om = new ObjectMapper();
-        om.setVisibility( PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        return new Jackson2JsonRedisSerializer<>(om, EventTime.class);
+        om.setVisibility( PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY );
+        return new Jackson2JsonRedisSerializer<>( om, EventTime.class );
     }
 
     @Bean
@@ -57,7 +63,7 @@ public class RedisConfig {
 
     @Bean
     @Qualifier("eventTimeRedisTemplate")
-    @ConditionalOnProperty(name="app.redis.mock", havingValue = "false", matchIfMissing = true)
+    @ConditionalOnProperty(name = "app.redis.mock", havingValue = "false", matchIfMissing = true)
     RedisTemplate<String, EventTime> eventTimeRedisTemplate(RedisConnectionFactory redisConnectionFactory,
                                                             StringRedisSerializer stringRedisSerializer,
                                                             Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {

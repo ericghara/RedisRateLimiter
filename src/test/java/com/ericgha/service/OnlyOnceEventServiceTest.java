@@ -1,8 +1,7 @@
-package com.ericgha.service.data.service;
+package com.ericgha.service;
 
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.message.PublishedEventMessage;
-import com.ericgha.service.OnlyOnceEventService;
 import com.ericgha.service.data.EventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
@@ -70,6 +69,16 @@ public class OnlyOnceEventServiceTest {
         Mockito.doReturn( true ).when( eventMapService ).tryAddEvent( Mockito.any( EventTime.class ) );
         HttpStatus foundStatus = onlyOnceEventService.putEvent( eventTime );
         Assertions.assertEquals( HttpStatus.valueOf( 201 ), foundStatus );
+    }
+
+    @Test
+    @DisplayName("putEvent offers event to eventQueue when eventMapService#tryAddEvent returns true")
+    void putEventOffersToEventQueueWhenNoConflict() {
+        EventTime eventTime = new EventTime( "testEvent", Instant.now().toEpochMilli() );
+        Mockito.doReturn( 0L ).when( eventQueueService ).size();
+        Mockito.doReturn( true ).when( eventMapService ).tryAddEvent( Mockito.any( EventTime.class ) );
+        onlyOnceEventService.putEvent( eventTime );
+        Mockito.verify( eventQueueService ).offer( eventTime );
     }
 
     @Test

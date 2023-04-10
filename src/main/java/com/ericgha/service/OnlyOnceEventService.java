@@ -52,6 +52,7 @@ public class OnlyOnceEventService {
         }
         long timestamp = Instant.now().toEpochMilli();
         if (success) {
+            eventQueueService.offer( eventTime );
             AddedEventMessage addedEventMessage = new AddedEventMessage( timestamp, eventTime );
             msgTemplate.convertAndSend( messagePrefix, addedEventMessage );
             return HttpStatus.CREATED;

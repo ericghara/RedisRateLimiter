@@ -15,6 +15,7 @@
   }
 
 
+
   </script>
   <!-- ES Module Shims: Import maps polyfill for modules browsers without import maps support (all except Chrome 89+) -->
   <script
@@ -35,7 +36,7 @@
           let count = 20;
           let skew = -Infinity;
           let subscription = client.subscribe('/topic/time', message => {
-              skew = Math.max(skew, Number(message.body) - Date.now() )
+              skew = Math.max(skew, Number(message.body) - Date.now())
               console.log(`Received: ${message.body}`);
               if (--count === 0) {
                   subscription.unsubscribe();
@@ -46,13 +47,12 @@
       }
 
       const logEvent = () => {
-          let subscription = client.subscribe('/topic/event', message => {
-              let messageJson = JSON.parse(message.body);
-              console.log(`${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.eventTime)}`);
+          let subscription = client.subscribe('/topic/only-once', message => {
+                  let messageJson = JSON.parse(message.body);
+                  console.log(`${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.eventTime)}`);
               }
           )
       }
-
 
 
       const client = new Client({
