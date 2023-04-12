@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+
+    redis-container:
+        image: redis:7
+        command: redis-server --requirepass password --save 60 1 --loglevel warning
+        ports:
+            - "6379:6379"
+        environment:
+            - REDIS_REPLICATION_MODE=master
+        volumes:
+            - redis-data:/var/lib/redis
+
+volumes:
+
+    redis-data:
+        name: redis-data
+        external: false
+
+

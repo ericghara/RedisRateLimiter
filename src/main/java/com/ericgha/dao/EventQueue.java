@@ -53,6 +53,7 @@ public class EventQueue {
         return eventTimeRedisTemplate.opsForList().rightPush( queueId, event );
     }
 
+    // todo this should occur within a transaction
     public List<EventTime> getRange(long start, long end) {
         List<EventTime> eventTimes = eventTimeRedisTemplate.opsForList().range( queueId, start, end );
         return Objects.nonNull( eventTimes ) ? eventTimes : List.of();
