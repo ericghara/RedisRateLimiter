@@ -8,7 +8,7 @@ import com.ericgha.service.data.EventExpiryService;
 import com.ericgha.service.data.EventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
-import exception.RetryableException;
+import com.ericgha.exception.RetryableException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;

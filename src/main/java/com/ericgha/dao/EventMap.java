@@ -1,7 +1,7 @@
 package com.ericgha.dao;
 
 import com.ericgha.dto.EventTime;
-import exception.DirtyStateException;
+import com.ericgha.exception.DirtyStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;

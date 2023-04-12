@@ -3,7 +3,7 @@ package com.ericgha.service.data;
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
 import com.ericgha.service.event_consumer.EventConsumer;
-import exception.DirtyStateException;
+import com.ericgha.exception.DirtyStateException;
 import jakarta.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

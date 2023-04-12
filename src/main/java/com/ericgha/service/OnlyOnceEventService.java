@@ -6,7 +6,7 @@ import com.ericgha.dto.message.PublishedEventMessage;
 import com.ericgha.service.data.EventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
-import exception.DirtyStateException;
+import com.ericgha.exception.DirtyStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;

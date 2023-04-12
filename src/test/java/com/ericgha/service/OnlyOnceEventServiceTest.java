@@ -5,7 +5,7 @@ import com.ericgha.dto.message.PublishedEventMessage;
 import com.ericgha.service.data.EventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
-import exception.DirtyStateException;
+import com.ericgha.exception.DirtyStateException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

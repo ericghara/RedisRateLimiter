@@ -5,7 +5,7 @@ import com.ericgha.config.RedisConfig;
 import com.ericgha.config.WebSocketConfig;
 import com.ericgha.dao.EventMap;
 import com.ericgha.dto.EventTime;
-import exception.DirtyStateException;
+import com.ericgha.exception.DirtyStateException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

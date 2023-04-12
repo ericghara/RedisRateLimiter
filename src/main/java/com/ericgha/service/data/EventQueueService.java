@@ -2,7 +2,7 @@ package com.ericgha.service.data;
 
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
-import exception.DirtyStateException;
+import com.ericgha.exception.DirtyStateException;
 import jakarta.annotation.Nullable;
 import org.springframework.retry.support.RetryTemplate;
 

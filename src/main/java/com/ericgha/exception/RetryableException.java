@@ -1,4 +1,4 @@
-package exception;
+package com.ericgha.exception;
 
 /**
  * Marker class for exceptions that may be retried.

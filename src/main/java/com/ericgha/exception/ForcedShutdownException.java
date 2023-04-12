@@ -1,4 +1,4 @@
-package exception;
+package com.ericgha.exception;
 
 /**
  * To signal task interruption due to a shutdown signal.
