@@ -2,6 +2,7 @@ package com.ericgha.dao;
 
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.Versioned;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -69,10 +71,12 @@ public class EventQueueIntTest {
     }
 
     @Test
-    public void offerReturnsSizeOfQueue() {
-        EventTime event = new EventTime( "first", 0 );
-        Assertions.assertEquals( 1, eventQueue.offer( event ) );
-        Assertions.assertEquals( 2, eventQueue.offer( event ) );
+    public void offerReturnsClock() {
+        EventTime event0 = new EventTime( "zero", 0 );
+        EventTime event1 = new EventTime( "one", 1 );
+        long earlierClock = eventQueue.offer( event0 );
+        long laterClock = eventQueue.offer( event1 );
+        Assertions.assertTrue( earlierClock < laterClock, "Event added first has lower clock" );
     }
 
     @Test
@@ -101,7 +105,9 @@ public class EventQueueIntTest {
         int threshold = 1;
         EventTime event = new EventTime( "Test Event", threshold ); // notice same time as threshold
         eventQueue.offer( event );
-        Assertions.assertEquals( event, eventQueue.tryPoll( threshold ) );
+        Versioned<EventTime> versionedEvent = eventQueue.tryPoll( threshold );
+        Assertions.assertEquals( event, versionedEvent.data(), "Event is expected" );
+        Assertions.assertTrue( versionedEvent.clock() > 0, "clock > 0" );
     }
 
     @Test
@@ -109,20 +115,32 @@ public class EventQueueIntTest {
         int threshold = 1;
         EventTime event = new EventTime( "Test Event", 0 ); // notice older than threshold
         eventQueue.offer( event );
-        Assertions.assertEquals( event, eventQueue.tryPoll( threshold ) );
+        Versioned<EventTime> versionedEvent = eventQueue.tryPoll( threshold );
+        Assertions.assertEquals( event, versionedEvent.data(), "Event is expected" );
+        Assertions.assertTrue( versionedEvent.clock() > 0, "clock > 0" );
     }
 
     @Test
     public void getRangeEmptyQueue() {
-        Assertions.assertEquals( List.of(), eventQueue.getRange(0, -1) );
+        Assertions.assertEquals( List.of(), eventQueue.getRange( 0, -1 ).data() );
     }
 
     @Test
     public void getAllNonEmptyQueue() {
         EventTime event0 = new EventTime( "Test Event0", 0 );
         EventTime event1 = new EventTime( "Test Event1", 1 );
-        List<EventTime> expected = List.of( event0, event1 );
-        expected.forEach( eventQueue::offer );
-        Assertions.assertEquals( expected, eventQueue.getRange(0, -1) );
+        List<EventTime> expectedEvents = List.of( event0, event1 );
+        expectedEvents.forEach( eventQueue::offer );
+        Versioned<List<EventTime>> versionedRange = eventQueue.getRange( 0, -1 );
+        Assertions.assertEquals( expectedEvents, versionedRange.data() );
+    }
+
+    @Test
+    public void operationsAreLinearized() {
+        // where clock starts is not generally enforced, so just referencing a start point.
+        long expectedVersion = eventQueue.getRange( 0, -1 ).clock();
+        Assertions.assertEquals( ++expectedVersion, eventQueue.offer( new EventTime( "test", 0 ) ) );
+        Assertions.assertEquals( ++expectedVersion, eventQueue.tryPoll( Instant.now().toEpochMilli() ).clock() );
+        Assertions.assertEquals( ++expectedVersion, eventQueue.getRange( 0, -1 ).clock() );
     }
 }

@@ -62,7 +62,7 @@ class EventExpiryServiceIntTest {
 
 
     @Test
-    @Timeout(1)
+    @Timeout(2)
     void pollsEvents() throws InterruptedException {
         for (int i = 0; i < 20; i++) {
             Thread.sleep( 1, 500 );

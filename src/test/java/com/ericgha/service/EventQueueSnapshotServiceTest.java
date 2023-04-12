@@ -16,7 +16,6 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -44,7 +43,7 @@ public class EventQueueSnapshotServiceTest {
 
     @Test
     @DisplayName("Service creates expected snapshot from eventQueueService")
-    void snapshotCreatesExpectedSnapsot() throws InterruptedException {
+    void snapshotCreatesExpectedSnapshot() throws InterruptedException {
         List<EventTime> eventTimes = List.of( new EventTime( "one", 1 ), new EventTime( "two", 2 ) );
         Mockito.doReturn( eventTimes ).doReturn( List.of() ).when( eventQueueServiceMock ).getAll();
         eventQueueSnapshotService.run( 10L, eventMapper, snapshotsaver );
@@ -68,33 +67,4 @@ public class EventQueueSnapshotServiceTest {
         Assertions.assertTrue( snapshots.size() >= 2, "num snapshots >= 2" );
         Assertions.assertTrue( snapshots.size() < 10, "num snapshots < 10" );
     }
-
-    @Test
-    @DisplayName("tryWait blocks while snapshot in progress")
-    void tryWaitBlocksDuringSnapshot() {
-        EventMapper<EventStatus> delayingMapper = eventTime -> {
-            try {
-                Thread.sleep( 20 );
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            return eventMapper.apply( eventTime );
-        };
-        // should take ~60 ms to process (3x (sleep 20 ms ) )
-        List<EventTime> eventTimes = List.of( new EventTime( "one", 1 ), new EventTime( "two", 2 ),
-                                              new EventTime( "three", 3 ) );
-        Mockito.doReturn( eventTimes ).when( eventQueueServiceMock ).getAll();
-        eventQueueSnapshotService.run( 70L, delayingMapper, snapshotsaver );
-        long maxDelay = 0L;
-        long stop = Instant.now().toEpochMilli() + 250;
-        while (Instant.now().toEpochMilli() < stop) {
-            long beforeLock = Instant.now().toEpochMilli();
-            eventQueueSnapshotService.tryWait();
-            maxDelay = Math.max( Instant.now().toEpochMilli() - beforeLock, maxDelay );
-        }
-        Assertions.assertTrue( maxDelay >= 30,
-                               "Encountered at least 30 ms delay in acquiring lock for 60 ms duration snapshot." );
-    }
-
-
 }

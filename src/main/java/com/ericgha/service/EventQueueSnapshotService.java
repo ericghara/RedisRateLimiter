@@ -13,15 +13,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class EventQueueSnapshotService {
 
     private final EventQueueService eventQueueService;
     private long periodMilli;
-    private final ReentrantLock lock;
-    private final AtomicBoolean inProgress;
     private boolean isRunning;
     @Nullable
     private EventMapper<?> eventMapper;
@@ -35,8 +31,6 @@ public class EventQueueSnapshotService {
     public EventQueueSnapshotService(@NonNull EventQueueService eventQueueService) {
         this.eventQueueService = eventQueueService;
         this.periodMilli = Long.MAX_VALUE;
-        this.inProgress = new AtomicBoolean( false );
-        this.lock = new ReentrantLock();
         this.isRunning = false;
     }
 
@@ -88,32 +82,12 @@ public class EventQueueSnapshotService {
         return true;
     }
 
-    /**
-     * Waits if a snapshot is in-progress.  Not intended to immediately prevent concurrent modifications of queue but to
-     * allow existing modifications to complete and block new ones from starting.
-     * <p>
-     * Since snapshot is a relatively long operation, and the queue has high contention an <em>essentially</em>
-     * pessimistic locking strategy was desired during the snapshot, but optimistic locking for other times. Retrying
-     * and optimistic locking of queue should catch suffice to allow modifications initiated before the lock complete.
-     */
-    public void tryWait() {
-        if (this.inProgress.get()) {
-            this.lock.lock(); // wait for snapshot or waiting threads to release lock
-            this.lock.unlock();
-        }
-    }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void snapshot() {
-        this.lock.lock();
-        if (this.inProgress.getAndSet( true )) {
-            throw new IllegalStateException( "A snapshot was already in progress.  This should not happen." );
-        }
-        List<EventTime> events = eventQueueService.getAll();
-        List<?> snapshot = events.stream().map( eventMapper ).toList();
+        List<EventTime> events = eventQueueService.getAll().data();
         long timestamp = Instant.now().toEpochMilli();
-        this.inProgress.set( false );
-        this.lock.unlock();
+        List<?> snapshot = events.stream().map( eventMapper ).toList();
         // this#run enforces same type for EventMapper<T> and SnapshotConsumer<T>
         snapshotConsumer.accept( timestamp, (List) snapshot );
     }

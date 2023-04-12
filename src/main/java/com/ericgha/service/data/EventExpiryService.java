@@ -2,8 +2,9 @@ package com.ericgha.service.data;
 
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
-import com.ericgha.service.event_consumer.EventConsumer;
+import com.ericgha.dto.Versioned;
 import com.ericgha.exception.DirtyStateException;
+import com.ericgha.service.event_consumer.EventConsumer;
 import jakarta.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +27,7 @@ import java.util.function.Consumer;
  * rapid succession creating factors that are outside the control of this service.  However, In times when there is low
  * contention for the queue the {@code pollIntervalMilli} of 10 ms should provide a reasonable approximation for the
  * delay for removing expired items are removed from the queue.
- *
+ * <p>
  * <em>Note:</em> the {@code pollIntervalMilli} is only significant during periods of quiescence, during periods with
  * multiple expirations polling occurs as quickly as events may be processed.
  */
@@ -50,7 +51,8 @@ public class EventExpiryService {
      * @param delayMilli    the amount of time events should be <em>aged</em> on the queue.
      * @throws IllegalStateException if {@code EventExpiryService} was already running
      */
-    public synchronized void start(EventConsumer eventConsumer, int delayMilli, int numWorkers) throws IllegalStateException {
+    public synchronized void start(EventConsumer eventConsumer, int delayMilli,
+                                   int numWorkers) throws IllegalStateException {
         if (Objects.isNull( eventConsumer )) {
             throw new NullPointerException( "Received a null EventConsumer." );
         }
@@ -173,7 +175,8 @@ public class EventExpiryService {
             @Nullable
             // returns null if thresholdTime not meet OR if DirtyStateException or retries exhausted
             private EventTime pollQueue() {
-                EventTime polledEvent = null;
+                // todo actually use versions
+                Versioned<EventTime> polledEvent = null;
                 try {
                     long now = Instant.now().toEpochMilli();
                     polledEvent = queueService.tryPoll( now - delayMilli );
@@ -185,7 +188,7 @@ public class EventExpiryService {
                         default -> throw e;
                     }
                 }
-                return polledEvent;
+                return Objects.nonNull( polledEvent ) ? polledEvent.data() : null;
             }
 
             void beginExhaustivePoll() {
