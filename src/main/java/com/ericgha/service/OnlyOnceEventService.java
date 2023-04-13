@@ -1,18 +1,17 @@
 package com.ericgha.service;
 
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.Versioned;
 import com.ericgha.dto.message.AddedEventMessage;
 import com.ericgha.dto.message.PublishedEventMessage;
+import com.ericgha.exception.DirtyStateException;
 import com.ericgha.service.data.EventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
-import exception.DirtyStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-
-import java.time.Instant;
 
 public class OnlyOnceEventService {
 
@@ -50,10 +49,9 @@ public class OnlyOnceEventService {
             log.debug( "Exhausted retries: {}", eventTime );
             return HttpStatus.SERVICE_UNAVAILABLE;
         }
-        long timestamp = Instant.now().toEpochMilli();
         if (success) {
-            eventQueueService.offer( eventTime );
-            AddedEventMessage addedEventMessage = new AddedEventMessage( timestamp, eventTime );
+            long clock = eventQueueService.offer( eventTime );
+            AddedEventMessage addedEventMessage = new AddedEventMessage( clock, eventTime );
             msgTemplate.convertAndSend( messagePrefix, addedEventMessage );
             return HttpStatus.CREATED;
         }
@@ -61,14 +59,14 @@ public class OnlyOnceEventService {
     }
 
     public EventConsumer getEventConsumer() {
-        return (EventTime eventTime) -> {
+        return (Versioned<EventTime> versionedEvent) -> {
+            EventTime eventTime = versionedEvent.data();
             try {
                 eventMapService.tryDeleteEvent( eventTime );
             } catch (DirtyStateException e) {
-                log.info( "Unable to delete event from EventMap: {}", eventTime );
+                log.info( "Unable to delete event from EventMap: {}", versionedEvent );
             }
-            long time = Instant.now().toEpochMilli();
-            PublishedEventMessage pubEventMessage = new PublishedEventMessage( time, eventTime );
+            PublishedEventMessage pubEventMessage = new PublishedEventMessage( versionedEvent.clock(), eventTime );
             msgTemplate.convertAndSend( messagePrefix, pubEventMessage );
         };
 

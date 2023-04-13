@@ -3,6 +3,7 @@ package com.ericgha.controller;
 import com.ericgha.dto.EventTime;
 import com.ericgha.service.OnlyOnceEventService;
 import com.ericgha.service.TimeSyncService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -50,8 +51,9 @@ public class BroadcastController {
     }
 
     @RequestMapping(path = "/event", method = RequestMethod.POST)
-    public HttpStatus event(@RequestBody String event) {
-        return onlyOnceEventService.putEvent( new EventTime( event, Instant.now().toEpochMilli() ) );
+    public void event(@RequestBody String event, HttpServletResponse response) {
+        HttpStatus status = onlyOnceEventService.putEvent( new EventTime( event, Instant.now().toEpochMilli() ) );
+        response.setStatus( status.value() );
     }
 
 }

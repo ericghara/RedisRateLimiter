@@ -11,4 +11,24 @@ public record InvalidatedEventMessage(long timestamp, EventTime eventTime) imple
     public MessageType messageType() {
         return MESSAGE_TYPE;
     }
+
+    @Override
+    public boolean equals(Object other) {
+        if (other instanceof InvalidatedEventMessage otherMessage) {
+            return this.timestamp == otherMessage.timestamp && this.eventTime.equals(otherMessage.eventTime());
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Long.hashCode( timestamp );
+        result = 31 * result + eventTime.hashCode();
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("InvalidatedEventMessage{timestamp=%d, eventTime=%s}", timestamp, eventTime);
+    }
 }

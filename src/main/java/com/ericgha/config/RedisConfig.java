@@ -23,7 +23,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisConfig {
 
     @Bean
-    @ConditionalOnProperty(name = "app.redis.mock", havingValue = "false", matchIfMissing = true)
+    @ConditionalOnProperty(name = "app.redis.disable-bean.redis-connection-factory", havingValue = "false",
+            matchIfMissing = true)
     public RedisConnectionFactory redisConnectionFactory(@Value("${spring.data.redis.host}") String redisHostname,
                                                          @Value("${spring.data.redis.password}") String password,
                                                          @Value("${spring.data.redis.port}") Integer redisPort) {
@@ -40,7 +41,8 @@ public class RedisConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "app.redis.mock", havingValue = "false", matchIfMissing = true)
+    @ConditionalOnProperty(name = "app.redis.disable-bean.string-redis-template", havingValue = "false",
+            matchIfMissing = true)
     StringRedisTemplate stringRedisTemplate(RedisConnectionFactory redisConnectionFactory) {
         StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory( redisConnectionFactory );
@@ -63,7 +65,8 @@ public class RedisConfig {
 
     @Bean
     @Qualifier("eventTimeRedisTemplate")
-    @ConditionalOnProperty(name = "app.redis.mock", havingValue = "false", matchIfMissing = true)
+    @ConditionalOnProperty(name = "app.redis.disable-bean.event-time-redis-template", havingValue = "false",
+            matchIfMissing = true)
     RedisTemplate<String, EventTime> eventTimeRedisTemplate(RedisConnectionFactory redisConnectionFactory,
                                                             StringRedisSerializer stringRedisSerializer,
                                                             Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {
