@@ -1,13 +1,13 @@
 package com.ericgha.service;
 
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.Versioned;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_transformer.EventMapper;
 import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
 import jakarta.annotation.Nullable;
 import org.springframework.lang.NonNull;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -85,11 +85,10 @@ public class EventQueueSnapshotService {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void snapshot() {
-        List<EventTime> events = eventQueueService.getAll().data();
-        long timestamp = Instant.now().toEpochMilli();
-        List<?> snapshot = events.stream().map( eventMapper ).toList();
+        Versioned<List<EventTime>> versionedEvents = eventQueueService.getAll();
+        List<?> snapshot = versionedEvents.data().stream().map( eventMapper ).toList();
         // this#run enforces same type for EventMapper<T> and SnapshotConsumer<T>
-        snapshotConsumer.accept( timestamp, (List) snapshot );
+        snapshotConsumer.accept( versionedEvents.clock(), (List) snapshot );
     }
 
 

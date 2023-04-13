@@ -15,7 +15,7 @@ public class SnapshotSaver implements SnapshotConsumer<EventStatus> {
      * Ignores snapshots that are an empty list or null;
      * @param timestamp the first input argument
      * @param snapshot the second input argument
-     * @throws IllegalStateException
+     * @throws IllegalStateException if snapshot is not empty and timestamp already in map
      */
     @Override
     public void accept(Long timestamp, List<EventStatus> snapshot) throws IllegalStateException {
