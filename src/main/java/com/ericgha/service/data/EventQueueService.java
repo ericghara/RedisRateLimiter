@@ -57,4 +57,13 @@ public class EventQueueService {
         return retryTemplate.execute( _context -> eventQueue.size() );
     }
 
+    /**
+     * Returns the key where the version clock value is stored.  This should be considered a restricted
+     * key for other processes.
+     * @return clock key
+     */
+    public String clockKey() {
+        return eventQueue.clockKey();
+    }
+
 }

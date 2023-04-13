@@ -12,11 +12,12 @@ import org.springframework.retry.TerminatedRetryException;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 
 /**
@@ -87,8 +88,8 @@ public class EventExpiryService {
         private final int numWorkers;
         private final Lock activityLock;
         private final Logger log;
-        private final int pollIntervalMilli = 10;
-        private final Consumer<EventTime> doOnExpire;
+        private final int POLL_INTERVAL_MILLI = 10;
+        private final EventConsumer doOnExpire;
         private final long delayMilli;
         private volatile boolean shutdownRequested;
         private ExecutorService pool;
@@ -111,8 +112,7 @@ public class EventExpiryService {
             shutdownRequested = false;
             pool = Executors.newFixedThreadPool( numWorkers );
             for (int workerId = 0; workerId < numWorkers; workerId++) {
-                PollWorker worker = new PollWorker( workerId );
-                pool.submit( worker );
+                submitWorker( workerId );
             }
             return true;
         }
@@ -125,6 +125,19 @@ public class EventExpiryService {
             pool.close();
             pool = null;
             return true;
+        }
+
+        private void submitWorker(int workerId) {
+            PollWorker worker = new PollWorker( workerId );
+            BiConsumer<Void, Throwable> errorHandler = (_v, e) -> {
+                if (Objects.nonNull( e )) {
+                    log.error( "Exception for worker {}}:", workerId, e );
+                    if (!shutdownRequested) {
+                        submitWorker( workerId );
+                    }
+                }
+            };
+            CompletableFuture.runAsync( worker, pool ).whenComplete( errorHandler );
         }
 
         class PollWorker implements Runnable {
@@ -149,14 +162,14 @@ public class EventExpiryService {
 
             private void handleActivity() {
                 activityLock.lock();
-                EventTime curEvent = null;
+                Versioned<EventTime> curEvent = null;
                 try {
                     // block until activity or shutdown
                     while (!shutdownRequested && Objects.isNull( curEvent )) {
                         curEvent = this.pollQueue();
                         if (Objects.isNull( curEvent )) {
                             try {
-                                Thread.sleep( pollIntervalMilli );
+                                Thread.sleep( POLL_INTERVAL_MILLI );
                             } catch (InterruptedException e) {
                                 log.debug( "Caught an interruptedException", e );
                                 Thread.currentThread().interrupt();
@@ -174,8 +187,7 @@ public class EventExpiryService {
 
             @Nullable
             // returns null if thresholdTime not meet OR if DirtyStateException or retries exhausted
-            private EventTime pollQueue() {
-                // todo actually use versions
+            private Versioned<EventTime> pollQueue() {
                 Versioned<EventTime> polledEvent = null;
                 try {
                     long now = Instant.now().toEpochMilli();
@@ -188,12 +200,12 @@ public class EventExpiryService {
                         default -> throw e;
                     }
                 }
-                return Objects.nonNull( polledEvent ) ? polledEvent.data() : null;
+                return Objects.nonNull( polledEvent ) ? polledEvent : null;
             }
 
             void beginExhaustivePoll() {
                 while (!shutdownRequested) {
-                    EventTime curEvent = this.pollQueue();
+                    Versioned<EventTime> curEvent = this.pollQueue();
                     if (Objects.nonNull( curEvent )) {
                         doOnExpire.accept( curEvent );
                     } else {

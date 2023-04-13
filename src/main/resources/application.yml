@@ -13,7 +13,7 @@ app:
       client: /topic
   once-only-event:
     event-duration-millis: 10000
-    max-events: 50
+    max-events: 100
     web-socket:
       element: "only-once"
     event-map:
@@ -26,18 +26,26 @@ app:
     event-queue:
       queue-id: "only-once-queue"
       retry:
-        # 3 attempts with 3ms delay between each
-        num-attempts: 3
+        # 5 attempts with 3ms delay between each
+        num-attempts: 5
         interval: 3
       num-workers: 2
+    # for testing
+    disable-bean:
+      event-expiry-service: false
+      event-queue-snapshot-service: false
+      only-once-event-service: false
   time-sync:
     num-frames: 20
   redis:
     # for testing
-    mock: False
+    disable-bean:
+      redis-connection-factory: false
+      string-redis-template: false
+      event-time-redis-template: false
 
 
 logging:
   level:
     org:
-      springframework: debug
+      springframework: info

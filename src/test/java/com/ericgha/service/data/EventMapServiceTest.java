@@ -2,7 +2,6 @@ package com.ericgha.service.data;
 
 import com.ericgha.config.OnlyOnceEventConfig;
 import com.ericgha.config.RedisConfig;
-import com.ericgha.config.WebSocketConfig;
 import com.ericgha.dao.EventMap;
 import com.ericgha.dto.EventTime;
 import com.ericgha.exception.DirtyStateException;
@@ -23,7 +22,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class, WebSocketConfig.class})
+@SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class})
 public class EventMapServiceTest {
 
     @MockBean
@@ -45,7 +44,13 @@ public class EventMapServiceTest {
         registry.add( "app.redis.retry.initial-interval", () -> 1 );
         registry.add( "app.redis.retry.multiplier", () -> 1.001 );
         registry.add( "app.redis.retry.num-attempts", () -> 5 );
-        registry.add( "app.redis.mock", () -> true ); // disable redis connection
+        // disable beans
+        registry.add( "app.redis.disable-bean.redis-connection-factory", () -> true );
+        registry.add( "app.redis.disable-bean.string-redis-template", () -> true );
+        registry.add( "app.redis.disable-bean.event-time-redis-template", () -> true );
+        registry.add( "app.once-only-event.disable-bean.event-expiry-service", () -> true );
+        registry.add( "app.once-only-event.disable-bean.event-queue-snapshot-service", () -> true );
+        registry.add( "app.once-only-event.disable-bean.only-once-event-service", () -> true );
     }
 
     @BeforeEach

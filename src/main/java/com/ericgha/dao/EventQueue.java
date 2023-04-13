@@ -97,24 +97,29 @@ public class EventQueue {
         return eventTimeRedisTemplate.opsForList().size( queueId );
     }
 
+    public String clockKey() {
+        return this.clockKey;
+    }
+
     public String queueId() {
         return this.queueId;
     }
 
-    // convenience method for testing
+
     @Nullable
+        // convenience method for testing
     EventTime peek() {
         return eventTimeRedisTemplate.opsForList().index( queueId, 0 );
     }
 
-    // convenience method for testing
     @Nullable
+        // convenience method for testing
     EventTime poll() {
         return eventTimeRedisTemplate.opsForList().leftPop( queueId );
     }
 
 
-    @SuppressWarnings( {"rawtypes", "unchecked"} )
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public class TimeConditionalPoll implements SessionCallback<List> {
 
         private final long thresholdTime;
@@ -176,7 +181,7 @@ public class EventQueue {
         }
     }
 
-    @SuppressWarnings( {"unchecked", "rawtypes"} )
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public class VersionedRange implements SessionCallback<List> {
 
         private final long start;

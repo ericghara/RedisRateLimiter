@@ -2,16 +2,23 @@ package com.ericgha.config;
 
 import com.ericgha.dao.EventMap;
 import com.ericgha.dao.EventQueue;
+import com.ericgha.dto.EventStatus;
 import com.ericgha.dto.EventTime;
+import com.ericgha.exception.RetryableException;
+import com.ericgha.service.EventQueueSnapshotService;
 import com.ericgha.service.OnlyOnceEventService;
 import com.ericgha.service.data.EventExpiryService;
 import com.ericgha.service.data.EventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
-import com.ericgha.exception.RetryableException;
+import com.ericgha.service.event_transformer.EventMapper;
+import com.ericgha.service.event_transformer.ToEventStatusAlwaysValid;
+import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
+import com.ericgha.service.snapshot_consumer.SnapshotSTOMPMessenger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -25,9 +32,13 @@ public class OnlyOnceEventConfig {
     @Autowired
     @Qualifier("eventTimeRedisTemplate")
     RedisTemplate<String, EventTime> eventTimeRedisTemplate;
-
     @Autowired
     StringRedisTemplate stringRedisTemplate;
+
+    @Value("${app.web-socket.prefix.client}/${app.once-only-event.web-socket.element}")
+    String stompPrefix;
+    @Value("${app.once-only-event.event-duration-millis}")
+    long eventDuration;
 
     @Bean
     @Qualifier("eventMapRetryTemplate")
@@ -62,25 +73,28 @@ public class OnlyOnceEventConfig {
 
     @Bean
     @Qualifier("onceOnlyEventMapService")
-    EventMapService onceOnlyEventMap(@Value("${app.once-only-event.event-duration-millis}") long eventDuration,
-                                     @Value("${app.once-only-event.event-map.key-prefix}") String keyPrefix,
+    EventMapService onceOnlyEventMap(@Value("${app.once-only-event.event-map.key-prefix}") String keyPrefix,
                                      @Qualifier("eventMapRetryTemplate") RetryTemplate retryTemplate) {
         EventMap eventMap = new EventMap( stringRedisTemplate, eventDuration );
         return new EventMapService( eventMap, keyPrefix, retryTemplate );
     }
 
     @Bean
+    @ConditionalOnProperty(name = "app.once-only-event.disable-bean.only-once-event-service", havingValue = "false",
+            matchIfMissing = true)
     OnlyOnceEventService onceOnlyEventService(
-            @Value("${app.web-socket.prefix.client}/${app.once-only-event.web-socket.element}") String prefix,
             @Value("${app.once-only-event.max-events}") long maxEvents,
             SimpMessagingTemplate simpMessagingTemplate,
             @Qualifier("onceOnlyEventQueueService") EventQueueService eventQueueService,
             @Qualifier("onceOnlyEventMapService") EventMapService eventMapService) {
-        return new OnlyOnceEventService( prefix, maxEvents, simpMessagingTemplate, eventQueueService, eventMapService );
+        return new OnlyOnceEventService( stompPrefix, maxEvents, simpMessagingTemplate, eventQueueService,
+                                         eventMapService );
     }
 
     @Bean
-    @Qualifier("OnlyOnceEventExpiryService")
+    @Qualifier("onceOnlyEventExpiryService")
+    @ConditionalOnProperty(name = "app.once-only-event.disable-bean.event-expiry-service", havingValue = "false",
+            matchIfMissing = true)
     EventExpiryService eventExpiryService(
             @Value("${app.once-only-event.event-duration-millis}") int eventDuration,
             @Value("${app.once-only-event.event-queue.num-workers}") int numWorkers,
@@ -90,6 +104,21 @@ public class OnlyOnceEventConfig {
         EventExpiryService expiryService = new EventExpiryService( eventQueueService );
         expiryService.start( eventConsumer, eventDuration, numWorkers );
         return expiryService;
+    }
+
+    @Bean
+    @Qualifier("onceOnlySnapshotService")
+    @ConditionalOnProperty(name = "app.once-only-event.disable-bean.event-queue-snapshot-service",
+            havingValue = "false", matchIfMissing = true)
+    EventQueueSnapshotService snapshotService(
+            SimpMessagingTemplate simpMessagingTemplate,
+            @Qualifier("onceOnlyEventQueueService") EventQueueService eventQueueService) {
+        EventQueueSnapshotService snapshotService = new EventQueueSnapshotService( eventQueueService );
+        EventMapper<EventStatus> mapper = new ToEventStatusAlwaysValid();
+        SnapshotConsumer<EventStatus> snapshotConsumer =
+                new SnapshotSTOMPMessenger( simpMessagingTemplate, stompPrefix );
+        snapshotService.run( eventDuration, mapper, snapshotConsumer );
+        return snapshotService;
     }
 
 }

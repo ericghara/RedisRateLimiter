@@ -1,11 +1,12 @@
 package com.ericgha.service;
 
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.Versioned;
 import com.ericgha.dto.message.PublishedEventMessage;
+import com.ericgha.exception.DirtyStateException;
 import com.ericgha.service.data.EventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
-import com.ericgha.exception.DirtyStateException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -95,18 +96,21 @@ public class OnlyOnceEventServiceTest {
     @DisplayName("eventConsumer publishes event")
     void eventConsumerPublishesEven() {
         EventTime eventTime = new EventTime( "testEvent", Instant.now().toEpochMilli() );
+        Versioned<EventTime> versionedEvent = new Versioned<>( 1L, eventTime );
         EventConsumer eventConsumer = onlyOnceEventService.getEventConsumer();
-        eventConsumer.accept( eventTime );
-        Mockito.verify( msgTemplate ).convertAndSend( Mockito.eq( onlyOnceEventService.messagePrefix() ), Mockito.any(
-                PublishedEventMessage.class ) );
+        eventConsumer.accept( versionedEvent );
+        PublishedEventMessage expectedMessage = new PublishedEventMessage( versionedEvent.clock(), eventTime );
+        Mockito.verify( msgTemplate )
+                .convertAndSend( Mockito.eq( onlyOnceEventService.messagePrefix() ), Mockito.eq( expectedMessage ) );
     }
 
     @Test
     @DisplayName("eventConsumer deletes event")
     void eventConsumerDeletesEvent() {
         EventTime eventTime = new EventTime( "testEvent", Instant.now().toEpochMilli() );
+        Versioned<EventTime> versionedEvent = new Versioned<>( 1L, eventTime );
         EventConsumer eventConsumer = onlyOnceEventService.getEventConsumer();
-        eventConsumer.accept( eventTime );
+        eventConsumer.accept( versionedEvent );
         Mockito.verify( eventMapService ).tryDeleteEvent( Mockito.eq( eventTime ) );
     }
 

@@ -1,12 +1,13 @@
 package com.ericgha.service.event_consumer;
 
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.Versioned;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 /**
  * Simply stores events, and the time they were added to the {@code InMemoryEventStore}.  Intended for testing.
@@ -14,27 +15,35 @@ import java.util.TreeMap;
  */
 public class InMemoryEventStore implements EventConsumer {
 
-    private final TreeMap<EventTime, Long> eventsByTimeAdded;
+    private final Map<EventTime, Long> eventsByWallClock;
+    private final Map<EventTime, Long> eventsByVersionClock;
 
     public InMemoryEventStore() {
-        this.eventsByTimeAdded = new TreeMap<>( EventTime.descTimeDescEventComparator() );
+        this.eventsByWallClock = new HashMap<>();
+        this.eventsByVersionClock = new HashMap<>();
     }
 
     @Override
-    public void accept(EventTime eventTime) {
-        if (Objects.isNull( eventTime )) {
+    public void accept(Versioned<EventTime> versionedEventTIme) {
+        if (Objects.isNull( versionedEventTIme )) {
             throw new NullPointerException( "Received a null event." );
         }
         long curTime = Instant.now().toEpochMilli();
-        Long prevTime = eventsByTimeAdded.putIfAbsent( eventTime, Instant.now().toEpochMilli() );
-        if (Objects.nonNull( prevTime )) {
+        Long prevTime = eventsByWallClock.putIfAbsent( versionedEventTIme.data(), Instant.now().toEpochMilli() );
+        Long prevVersion = eventsByVersionClock.putIfAbsent( versionedEventTIme.data(), versionedEventTIme.clock()  );
+        if (Objects.nonNull( prevTime ) ) {
             throw new IllegalStateException(
                     String.format( "Event: %s was already seen. Current Time %d, Previously added time: %d.",
-                            eventTime, curTime, prevTime ) );
+                            versionedEventTIme, curTime, prevTime ) );
         }
     }
 
-    public SortedMap<EventTime, Long> getAllEvents() {
-        return Collections.unmodifiableSortedMap( eventsByTimeAdded );
+    public Map<EventTime, Long> eventsByWallClock() {
+        return Collections.unmodifiableMap( eventsByWallClock );
     }
+
+    public Map<EventTime, Long> eventsByVersionClock() {
+        return Collections.unmodifiableMap( eventsByVersionClock );
+    }
+
 }

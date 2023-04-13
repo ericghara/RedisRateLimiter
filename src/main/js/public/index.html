@@ -49,7 +49,12 @@
       const logEvent = () => {
           let subscription = client.subscribe('/topic/only-once', message => {
                   let messageJson = JSON.parse(message.body);
-                  console.log(`${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.eventTime)}`);
+                  if (messageJson.messageType === "KEY_FRAME") {
+                      console.log(`${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.snapshot)}`);
+                  }
+                  else {
+                      console.log(`${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.eventTime)}`);
+                  }
               }
           )
       }
