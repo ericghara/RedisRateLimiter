@@ -4,9 +4,9 @@ import com.ericgha.dto.EventTime;
 import com.ericgha.dto.MessageType;
 import org.springframework.lang.NonNull;
 
-public record AddedEventMessage(long timestamp, @NonNull EventTime eventTime) implements EventStatusMessageInterface {
+public record SubmittedEventMessage(long timestamp, @NonNull EventTime eventTime) implements EventStatusMessageInterface {
 
-    public static final MessageType MESSAGE_TYPE = MessageType.ADDED_EVENT;
+    public static final MessageType MESSAGE_TYPE = MessageType.SUBMITTED_EVENT;
 
     @Override
     public MessageType messageType() {
@@ -16,7 +16,7 @@ public record AddedEventMessage(long timestamp, @NonNull EventTime eventTime) im
 
     @Override
     public boolean equals(Object other) {
-        if (other instanceof AddedEventMessage otherMessage) {
+        if (other instanceof SubmittedEventMessage otherMessage) {
             return this.timestamp == otherMessage.timestamp && this.eventTime.equals( otherMessage.eventTime() );
         }
         return false;
@@ -31,6 +31,6 @@ public record AddedEventMessage(long timestamp, @NonNull EventTime eventTime) im
 
     @Override
     public String toString() {
-        return String.format( "AddedEventMessage{timestamp=%d, eventTime=%s}", timestamp, eventTime );
+        return String.format( "SubmittedEventMessage{timestamp=%d, eventTime=%s}", timestamp, eventTime );
     }
 }

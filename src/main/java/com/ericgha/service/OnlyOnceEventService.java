@@ -2,7 +2,7 @@ package com.ericgha.service;
 
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
-import com.ericgha.dto.message.AddedEventMessage;
+import com.ericgha.dto.message.SubmittedEventMessage;
 import com.ericgha.dto.message.PublishedEventMessage;
 import com.ericgha.exception.DirtyStateException;
 import com.ericgha.service.data.EventMapService;
@@ -51,8 +51,8 @@ public class OnlyOnceEventService {
         }
         if (success) {
             long clock = eventQueueService.offer( eventTime );
-            AddedEventMessage addedEventMessage = new AddedEventMessage( clock, eventTime );
-            msgTemplate.convertAndSend( messagePrefix, addedEventMessage );
+            SubmittedEventMessage submittedEventMessage = new SubmittedEventMessage( clock, eventTime );
+            msgTemplate.convertAndSend( messagePrefix, submittedEventMessage );
             return HttpStatus.CREATED;
         }
         return HttpStatus.CONFLICT;
