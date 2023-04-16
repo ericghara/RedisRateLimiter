@@ -48,6 +48,7 @@ public class EventMapServiceTest {
         registry.add( "app.redis.disable-bean.redis-connection-factory", () -> true );
         registry.add( "app.redis.disable-bean.string-redis-template", () -> true );
         registry.add( "app.redis.disable-bean.event-time-redis-template", () -> true );
+        registry.add( "app.redis.disable-bean.string-long-redis-template", () -> true );
         registry.add( "app.once-only-event.disable-bean.event-expiry-service", () -> true );
         registry.add( "app.once-only-event.disable-bean.event-queue-snapshot-service", () -> true );
         registry.add( "app.once-only-event.disable-bean.only-once-event-service", () -> true );

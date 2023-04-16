@@ -16,6 +16,7 @@ import org.springframework.data.redis.connection.lettuce.LettuceClientConfigurat
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.serializer.GenericToStringSerializer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -78,6 +79,27 @@ public class RedisConfig {
         // values use json serializer
         template.setValueSerializer( jackson2JsonRedisSerializer );
         template.setHashValueSerializer( jackson2JsonRedisSerializer );
+        template.setEnableTransactionSupport( true );
+        template.afterPropertiesSet();
+        return template;
+    }
+
+    @Bean
+    @Qualifier("stringLongRedisTemplate")
+    @ConditionalOnProperty(name = "app.redis.disable-bean.string-long-redis-template", havingValue = "false",
+            matchIfMissing = true)
+    RedisTemplate<String, Long> stringLongRedisTemplate(RedisConnectionFactory redisConnectionFactory,
+                                                        StringRedisSerializer stringRedisSerializer) {
+        RedisTemplate<String, Long> template = new RedisTemplate<>();
+        GenericToStringSerializer<Long> longSerializer = new GenericToStringSerializer<>( Long.class );
+        // keys
+        template.setKeySerializer( stringRedisSerializer );
+        template.setHashValueSerializer( stringRedisSerializer );
+        // values
+        template.setValueSerializer( longSerializer );
+        template.setHashValueSerializer( longSerializer );
+        // etc
+        template.setConnectionFactory( redisConnectionFactory );
         template.setEnableTransactionSupport( true );
         template.afterPropertiesSet();
         return template;

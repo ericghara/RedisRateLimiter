@@ -43,6 +43,7 @@ app:
       redis-connection-factory: false
       string-redis-template: false
       event-time-redis-template: false
+      string-long-redis-template: false
 
 
 logging:

@@ -21,6 +21,7 @@ public class EventMap {
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
     private long eventDurationMillis;
 
+    // todo add prefix to keys
     public EventMap(StringRedisTemplate redisTemplate,
                     long eventDurationMillis) {
         this.valueOps = redisTemplate.opsForValue();
