@@ -51,6 +51,7 @@ class EventExpiryServiceIntTest {
     static void properties(DynamicPropertyRegistry registry) {
         registry.add( "spring.data.redis.host", redis::getHost );
         registry.add( "spring.data.redis.port", () -> redis.getMappedPort( 6379 ) );
+        registry.add( "spring.data.redis.password", () -> "" );
         registry.add( "app.once-only-event.event-duration-millis", () -> DELAY_MILLI ); // PropertyRegistry shouldn't be read by these tests
         // disable beans
         registry.add("app.once-only-event.disable-bean.event-expiry-service", () -> true);

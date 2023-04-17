@@ -12,8 +12,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisPassword;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
-import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
+import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericToStringSerializer;
@@ -29,16 +29,13 @@ public class RedisConfig {
     public RedisConnectionFactory redisConnectionFactory(@Value("${spring.data.redis.host}") String redisHostname,
                                                          @Value("${spring.data.redis.password}") String password,
                                                          @Value("${spring.data.redis.port}") Integer redisPort) {
-        // not currently required as all properties currently are autoconfigurable, but leaving open
-        // for future customization.
         RedisPassword redisPassword = password.isBlank() ? RedisPassword.none() : RedisPassword.of( password );
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration( redisHostname, redisPort );
         config.setPassword( redisPassword );
-
-        LettuceClientConfiguration clientConfiguration = LettuceClientConfiguration.builder()
+        JedisClientConfiguration clientConfiguration = JedisClientConfiguration.builder()
                 .clientName( redisHostname )
                 .build();
-        return new LettuceConnectionFactory( config, clientConfiguration );
+        return new JedisConnectionFactory( config, clientConfiguration );
     }
 
     @Bean
