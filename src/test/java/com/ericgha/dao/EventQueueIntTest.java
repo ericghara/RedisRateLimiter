@@ -3,6 +3,7 @@ package com.ericgha.dao;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
+import com.ericgha.test_fixtures.EnableRedisTestContainer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,38 +13,20 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-@Testcontainers
+@EnableRedisTestContainer
 @SpringBootTest(classes = {RedisConfig.class})
 public class EventQueueIntTest {
-
-    @Container
-    private static final GenericContainer<?> redis = new GenericContainer<>( DockerImageName.parse( "redis:7" ) )
-            .withExposedPorts( 6379 )
-            .withReuse( true );
 
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
     RedisTemplate<String, EventTime> eventTimeRedisTemplate;
     EventQueue eventQueue;
-
-    @DynamicPropertySource
-    static void properties(DynamicPropertyRegistry registry) {
-        registry.add( "spring.data.redis.host", redis::getHost );
-        registry.add( "spring.data.redis.port", () -> redis.getMappedPort( 6379 ) );
-        registry.add( "spring.data.redis.password", () -> "" );
-    }
 
     @BeforeEach
     void before() {

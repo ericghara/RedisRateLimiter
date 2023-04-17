@@ -1,6 +1,7 @@
 package com.ericgha.dao;
 
 import com.ericgha.config.RedisConfig;
+import com.ericgha.test_fixtures.EnableRedisTestContainer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,37 +11,21 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.Instant;
 import java.util.UUID;
 
-@Testcontainers
+@EnableRedisTestContainer
 @SpringBootTest(classes = {RedisConfig.class})
 public class EventMapIntTest {
 
-    @Container
-    private static final GenericContainer<?> redis = new GenericContainer<>( DockerImageName.parse( "redis:7" ) )
-            .withExposedPorts( 6379 )
-            .withReuse( true );
+
     private static final int EVENT_DURATION = 10_000;
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
     StringRedisTemplate template;
     private EventMap eventMap;
-
-    @DynamicPropertySource
-    static void properties(DynamicPropertyRegistry registry) {
-        registry.add( "spring.data.redis.host", redis::getHost );
-        registry.add( "spring.data.redis.port", () -> redis.getMappedPort( 6379 ) );
-        registry.add( "spring.data.redis.password", () -> "" );
-    }
 
     @BeforeEach
     void before() {

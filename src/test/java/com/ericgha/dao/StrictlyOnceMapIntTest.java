@@ -3,6 +3,7 @@ package com.ericgha.dao;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventTime;
 import com.ericgha.exception.DirtyStateException;
+import com.ericgha.test_fixtures.EnableRedisTestContainer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,14 +24,10 @@ import org.testcontainers.utility.DockerImageName;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
-@Testcontainers
+@EnableRedisTestContainer
 @SpringBootTest(classes = {RedisConfig.class})
 public class StrictlyOnceMapIntTest {
 
-    @Container
-    private static final GenericContainer<?> redis = new GenericContainer<>( DockerImageName.parse( "redis:7" ) )
-            .withExposedPorts( 6379 )
-            .withReuse( true );
     private static final int EVENT_DURATION = 10_000;
     private static final String RECENT_EVENTS_PREFIX = "RECENT_EVENTS";
     private static final String IS_VALID_PREFIX = "IS_VALID";
@@ -39,13 +36,6 @@ public class StrictlyOnceMapIntTest {
     @Autowired
     RedisConnectionFactory connectionFactory;
     StrictlyOnceMap strictlyOnceMap;
-
-    @DynamicPropertySource
-    static void properties(DynamicPropertyRegistry registry) {
-        registry.add( "spring.data.redis.host", redis::getHost );
-        registry.add( "spring.data.redis.port", () -> redis.getMappedPort( 6379 ) );
-        registry.add( "spring.data.redis.password", () -> "" );
-    }
 
     @BeforeEach
     void before() {
