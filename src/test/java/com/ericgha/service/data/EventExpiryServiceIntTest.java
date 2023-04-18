@@ -1,5 +1,6 @@
 package com.ericgha.service.data;
 
+import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.config.OnlyOnceEventConfig;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.config.WebSocketConfig;
@@ -13,10 +14,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -34,7 +35,8 @@ class EventExpiryServiceIntTest {
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    StringRedisTemplate stringRedisTemplate;
+    @Qualifier("stringRedisTemplate")
+    FunctionRedisTemplate<String, String> stringRedisTemplate;
 
     @Autowired
     EventQueueService queueService;

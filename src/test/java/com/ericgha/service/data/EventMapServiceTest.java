@@ -1,5 +1,6 @@
 package com.ericgha.service.data;
 
+import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.config.OnlyOnceEventConfig;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dao.EventMap;
@@ -13,8 +14,6 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -29,11 +28,12 @@ public class EventMapServiceTest {
     EventMap eventMapMock;
 
     @MockBean
-    StringRedisTemplate stringRedisTemplate;
+    @Qualifier("stringRedisTemplate")
+    FunctionRedisTemplate<String, String> stringRedisTemplate;
 
     @MockBean
     @Qualifier("eventTimeRedisTemplate")
-    RedisTemplate<String, EventTime> eventTimeRedisTemplate;
+    FunctionRedisTemplate<String, EventTime> eventTimeRedisTemplate;
 
 
     EventMapService eventMapService;

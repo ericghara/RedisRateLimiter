@@ -13,7 +13,8 @@ services:
             - REDIS_REPLICATION_MODE=master
         volumes:
             - redis-data:/var/lib/redis
-            - ./scripts/:/opt/
+            - ./resources/redis:/opt/redis-functions/
+            - ./scripts/sh/:/opt/sh/
 
 volumes:
 

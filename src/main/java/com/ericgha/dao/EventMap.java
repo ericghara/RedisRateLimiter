@@ -6,8 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Instant;
@@ -17,12 +17,12 @@ import java.util.Objects;
 public class EventMap {
 
     private final ValueOperations<String, String> valueOps;
-    private final StringRedisTemplate redisTemplate;
+    private final RedisTemplate<String, String> redisTemplate;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
     private long eventDurationMillis;
 
     // todo add prefix to keys
-    public EventMap(StringRedisTemplate redisTemplate,
+    public EventMap(RedisTemplate<String, String> redisTemplate,
                     long eventDurationMillis) {
         this.valueOps = redisTemplate.opsForValue();
         this.redisTemplate = redisTemplate;

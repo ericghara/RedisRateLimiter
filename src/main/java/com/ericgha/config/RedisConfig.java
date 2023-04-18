@@ -9,45 +9,23 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.Resource;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisPassword;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericToStringSerializer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import java.io.IOException;
+
 @Configuration
 public class RedisConfig {
 
-    @Bean
-    @ConditionalOnProperty(name = "app.redis.disable-bean.redis-connection-factory", havingValue = "false",
-            matchIfMissing = true)
-    public RedisConnectionFactory redisConnectionFactory(@Value("${spring.data.redis.host}") String redisHostname,
-                                                         @Value("${spring.data.redis.password}") String password,
-                                                         @Value("${spring.data.redis.port}") Integer redisPort) {
-        RedisPassword redisPassword = password.isBlank() ? RedisPassword.none() : RedisPassword.of( password );
-        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration( redisHostname, redisPort );
-        config.setPassword( redisPassword );
-        JedisClientConfiguration clientConfiguration = JedisClientConfiguration.builder()
-                .clientName( redisHostname )
-                .build();
-        return new JedisConnectionFactory( config, clientConfiguration );
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "app.redis.disable-bean.string-redis-template", havingValue = "false",
-            matchIfMissing = true)
-    StringRedisTemplate stringRedisTemplate(RedisConnectionFactory redisConnectionFactory) {
-        StringRedisTemplate template = new StringRedisTemplate();
-        template.setConnectionFactory( redisConnectionFactory );
-        template.setEnableTransactionSupport( true );
-        template.afterPropertiesSet();
-        return template;
-    }
+    @Value("classpath:redis/redis_functions.lua")
+    Resource redisFunctions;
 
     @Bean
     Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer() {
@@ -61,14 +39,50 @@ public class RedisConfig {
         return new StringRedisSerializer();
     }
 
+
+    @Bean
+    @ConditionalOnProperty(name = "app.redis.disable-bean.redis-connection-factory", havingValue = "false",
+            matchIfMissing = true)
+    public RedisConnectionFactory redisConnectionFactory(@Value("${spring.data.redis.host}") String redisHostname,
+                                                         @Value("${spring.data.redis.password}") String password,
+                                                         @Value("${spring.data.redis.port}")
+                                                         Integer redisPort) {
+        RedisPassword redisPassword = password.isBlank() ? RedisPassword.none() : RedisPassword.of( password );
+        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration( redisHostname, redisPort );
+        config.setPassword( redisPassword );
+        JedisClientConfiguration clientConfiguration = JedisClientConfiguration.builder()
+                .clientName( redisHostname )
+                .build();
+        return new JedisConnectionFactory( config, clientConfiguration );
+    }
+
+    @Bean
+    @Qualifier("stringRedisTemplate")
+    @ConditionalOnProperty(name = "app.redis.disable-bean.string-redis-template", havingValue = "false",
+            matchIfMissing = true)
+    FunctionRedisTemplate<String, String> stringRedisTemplate(RedisConnectionFactory redisConnectionFactory,
+                                                              StringRedisSerializer stringRedisSerializer) {
+        FunctionRedisTemplate<String, String> template = new FunctionRedisTemplate<>( redisFunctions );
+        // set serializers
+        template.setKeySerializer( stringRedisSerializer );
+        template.setValueSerializer( stringRedisSerializer );
+        template.setHashKeySerializer( stringRedisSerializer );
+        template.setHashValueSerializer( stringRedisSerializer );
+
+        template.setConnectionFactory( redisConnectionFactory );
+        template.setEnableTransactionSupport( true );
+        template.afterPropertiesSet();
+        return template;
+    }
+
     @Bean
     @Qualifier("eventTimeRedisTemplate")
     @ConditionalOnProperty(name = "app.redis.disable-bean.event-time-redis-template", havingValue = "false",
             matchIfMissing = true)
-    RedisTemplate<String, EventTime> eventTimeRedisTemplate(RedisConnectionFactory redisConnectionFactory,
-                                                            StringRedisSerializer stringRedisSerializer,
-                                                            Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {
-        RedisTemplate<String, EventTime> template = new RedisTemplate<>();
+    FunctionRedisTemplate<String, EventTime> eventTimeRedisTemplate(RedisConnectionFactory redisConnectionFactory,
+                                                                    StringRedisSerializer stringRedisSerializer,
+                                                                    Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {
+        FunctionRedisTemplate<String, EventTime> template = new FunctionRedisTemplate<>( redisFunctions );
         template.setConnectionFactory( redisConnectionFactory );
         // keys use string serializer
         template.setKeySerializer( stringRedisSerializer );
@@ -85,13 +99,13 @@ public class RedisConfig {
     @Qualifier("stringLongRedisTemplate")
     @ConditionalOnProperty(name = "app.redis.disable-bean.string-long-redis-template", havingValue = "false",
             matchIfMissing = true)
-    RedisTemplate<String, Long> stringLongRedisTemplate(RedisConnectionFactory redisConnectionFactory,
-                                                        StringRedisSerializer stringRedisSerializer) {
-        RedisTemplate<String, Long> template = new RedisTemplate<>();
+    FunctionRedisTemplate<String, Long> stringLongRedisTemplate(RedisConnectionFactory redisConnectionFactory,
+                                                                StringRedisSerializer stringRedisSerializer) {
+        FunctionRedisTemplate<String, Long> template = new FunctionRedisTemplate<>( redisFunctions );
         GenericToStringSerializer<Long> longSerializer = new GenericToStringSerializer<>( Long.class );
         // keys
         template.setKeySerializer( stringRedisSerializer );
-        template.setHashValueSerializer( stringRedisSerializer );
+        template.setHashKeySerializer( stringRedisSerializer );
         // values
         template.setValueSerializer( longSerializer );
         template.setHashValueSerializer( longSerializer );

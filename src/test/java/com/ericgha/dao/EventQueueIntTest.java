@@ -1,5 +1,6 @@
 package com.ericgha.dao;
 
+import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
@@ -9,10 +10,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import java.time.Instant;
 import java.util.List;
@@ -25,7 +26,8 @@ public class EventQueueIntTest {
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    RedisTemplate<String, EventTime> eventTimeRedisTemplate;
+    @Qualifier("eventTimeRedisTemplate")
+    FunctionRedisTemplate<String, EventTime> eventTimeRedisTemplate;
     EventQueue eventQueue;
 
     @BeforeEach

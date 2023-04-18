@@ -21,8 +21,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.retry.support.RetryTemplate;
 
@@ -31,9 +29,10 @@ public class OnlyOnceEventConfig {
 
     @Autowired
     @Qualifier("eventTimeRedisTemplate")
-    RedisTemplate<String, EventTime> eventTimeRedisTemplate;
+    FunctionRedisTemplate<String, EventTime> eventTimeRedisTemplate;
     @Autowired
-    StringRedisTemplate stringRedisTemplate;
+    @Qualifier("stringRedisTemplate")
+    FunctionRedisTemplate<String, String> stringRedisTemplate;
 
     @Value("${app.web-socket.prefix.client}/${app.once-only-event.web-socket.element}")
     String stompPrefix;
