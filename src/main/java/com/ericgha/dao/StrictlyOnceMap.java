@@ -1,7 +1,9 @@
 package com.ericgha.dao;
 
 import com.ericgha.config.FunctionRedisTemplate;
+import com.ericgha.dto.EventHash;
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.TimeIsValid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
@@ -14,6 +16,27 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 // todo make a note about how things break if event's time is far off, shouldn't be an issue b/c it's server generated
+
+/**
+ * A map that tracks events, modelling strictly once behavior for a given period, {@code eventDuration}.
+ * <p>
+ * {@code event}s are converted into map keys using the format {@code keyPrefix:eventIdentifier:event}.  Each value
+ * consists of three fields:
+ *
+ * <ol>
+ *     <li>{@code time}: the most recent timestamp for the event (<em>note:</em> by literal timestamp on the event, not most recent call)</li>
+ *     <li>{@code isValid}: if conflicts have occured for the event at time: {@code time}, {@code true} (1) or {@code false} (0)</li>
+ *     <li>{@code retired}: the last time that was retired after {@code eventDuration} with no conflicts (i.e. isValid was true throughout {@code EventDuration})</li>
+ * </ol>
+ *
+ * This creates a data structure where it is guaranteed that the validity of an event at a time may be queried for a period
+ * of 2*{@code eventDuration} after the event is received.  Beyond that period the data structure may fail to identify that
+ * an event at a time was valid.  Therefore, users of this map should guarantee that they query an event's state within
+ * one {@code eventDuration} after the expected event completion (i.e. the event's {@code time + eventDuration}).
+ * <p>
+ * To preserve space in the database events are expired within {@code 2*eventDuration} time after their last modification.
+ *
+ */
 public class StrictlyOnceMap {
 
     private static final String DELIMITER = ":"; // delimiter between prefix and key
@@ -24,6 +47,7 @@ public class StrictlyOnceMap {
     private final String clockKey;
     private final String isValidIdentifier = "is_valid";
     private final String timeIdentifier = "time";
+    private final String retiredIdentifier = "retired";
     private final String eventElement = "EVENT";
     private final Logger log;
 
@@ -36,6 +60,41 @@ public class StrictlyOnceMap {
         this.clockKey = this.encodeKey( clockElement );
         this.stringLongRedisTemplate = stringLongRedisTemplate;
         this.log = LoggerFactory.getLogger( this.getClass().getName() );
+    }
+
+    static boolean toBoolean(Long i) throws IllegalArgumentException {
+        if (0 == i) {
+            return false;
+        }
+        if (1 == i) {
+            return true;
+        }
+        throw new IllegalArgumentException( "Can only convert 0 or 1 to a boolean." );
+    }
+
+    static EventHash toEventHash(List<Long> rawData) throws IllegalArgumentException {
+        Objects.requireNonNull(rawData, "Received a null rawData parameter.");
+        if (rawData.size() != 3) {
+            throw new IllegalStateException("raw Data should be a list of length 3");
+        }
+        Long time = rawData.get(0);
+        Boolean isValid = Objects.isNull(rawData.get(1)) ? null : toBoolean(rawData.get(1) );
+        Long retired = rawData.get(2);
+        if (Objects.isNull(time) && Objects.isNull(isValid) && Objects.isNull(retired) || Objects.nonNull(time) && Objects.nonNull(isValid)) {
+            return new EventHash(time, isValid, retired);
+        }
+        throw new IllegalArgumentException( "EventHash is in an inconsistent state: " + rawData );
+    }
+
+    static TimeIsValid toTimeIsValid(List<Long> rawData) {
+        Objects.requireNonNull(rawData, "Received a null rawData parameter.");
+        if (rawData.size() != 0 && rawData.size() != 2) {
+            throw new IllegalArgumentException( "raw data should have a length of 0 or 2." + rawData );
+        }
+        if (rawData.size() == 0) {
+            return new TimeIsValid(null, null);
+        }
+        return new TimeIsValid( rawData.get( 0 ), toBoolean( rawData.get( 1 ) ) );
     }
 
     // for testing
@@ -87,78 +146,50 @@ public class StrictlyOnceMap {
         return String.join( DELIMITER, prefixAndElements );
     }
 
-    //    private String stripPrefix(@NonNull String prefixedStr, String prefix) {
-//        String fullPrefix = isValidPrefix + DELIMITER;
-//        if (!prefixedStr.startsWith( fullPrefix )) {
-//            log.warn( "{} does not begin with the prefix: {}", prefixedStr, prefix );
-//            throw new IllegalArgumentException( "Invalid format.  Input does not begin with the expected prefix." );
-//        }
-//        return prefixedStr.substring( fullPrefix.length() );
-//    }
-//
-//    private String encodeEventTime(@NonNull String event, long time) {
-//        return isValidPrefix + DELIMITER + event + '@' + time;  //prefix.event@1234
-//    }
-//
-//    private EventTime decodeEventTime(@NonNull String prefixedEventTime) throws IllegalArgumentException {
-//        String eventTimeStr = stripPrefix( prefixedEventTime, isValidPrefix );
-//        String[] eventAndTime = eventTimeStr.split( "@(?=\\d+$)", 1 );
-//        if (eventAndTime.length != 2) {
-//            throw new IllegalArgumentException( "Invalid format for serialized EventTime: " + eventTimeStr );
-//        }
-//        long time;
-//        try {
-//            time = Long.parseLong( eventAndTime[1] );
-//        } catch (NumberFormatException e) {
-//            throw new IllegalArgumentException( "Invalid format for serialized EventTime: " + eventTimeStr, e );
-//        }
-//        return new EventTime( eventAndTime[0], time );
-//    }
-//
-    private String encodeEvent(@NonNull String event) {
+    // open for testing
+    String encodeEvent(@NonNull String event) {
         return encodeKey( eventElement, event );
     }
-//
-//    private String decodeEvent(@NonNull String prefixedEvent) throws IllegalArgumentException {
-//        return stripPrefix( prefixedEvent, keyPrefix );
-//    }
 
     /**
      * @param eventTime
      * @return List[oldState, newState], if event is unique (or previously expired) old state will be an empty list.
      * Otherwise, oldState and new state will be [time, isValid].  isValid must be 0 (false) or 1 (true).
-     * @throws IllegalStateException
+     * @throws IllegalStateException if an improperly formatted response is returned from the database
      */
     @SuppressWarnings("unchecked")
-    @Nullable
-    public List<List<Long>> putEvent(EventTime eventTime) throws IllegalStateException {
+    public List<TimeIsValid> putEvent(EventTime eventTime) throws IllegalStateException {
+        String eventKey = encodeEvent( eventTime.event() );
         List<List<Long>> rawResult;
         try (Jedis connection = stringLongRedisTemplate.getJedisConnection()) {
-            rawResult = (List<List<Long>>) connection.fcall( "put_event", List.of( eventTime.event(), keyPrefix ),
+            rawResult = (List<List<Long>>) connection.fcall( "put_event", List.of( eventKey, clockKey ),
                                                              List.of( Long.toString( eventTime.time() ),
                                                                       Long.toString( eventDurationMillis ) ) );
         }
         if (Objects.isNull( rawResult )) {
             throw new NullPointerException( "Command put_event must not return null, but received null." );
         }
-        if (rawResult.size() != 2 || ( rawResult.get( 0 ).size() != 0 && rawResult.get( 0 ).size() != 2 ) ||
-                rawResult.get( 1 ).size() != 2) {
-            throw new IllegalStateException(
-                    "put_event should return List[List[prevTime, prevIsValid], List[curTime, curIsValid]]" );
+        if (rawResult.size() != 2) {
+            throw new IllegalStateException( "RawResult must have a length of 2: " + rawResult );
         }
-        return rawResult;
+        TimeIsValid prevState = toTimeIsValid( rawResult.get(0) );
+        TimeIsValid curState = toTimeIsValid( rawResult.get(1) );
+        return List.of( prevState, curState );
     }
 
     //for testing
-    List<Long> getEventInfo(String event) {
+    EventHash getEventHash(String event) throws IllegalStateException {
         String prefixedEventTime = encodeEvent( event );
-        List<?> values = stringLongRedisTemplate.opsForHash()
-                .multiGet( prefixedEventTime, List.of( timeIdentifier, isValidIdentifier ) );
-        return values.stream().map( l -> (Long) l ).toList();
+        List<Long> values = stringLongRedisTemplate.opsForHash()
+                .multiGet( prefixedEventTime, List.of( timeIdentifier, isValidIdentifier, retiredIdentifier ) ).stream()
+                .map( l -> (Long) l ).toList();
+        return toEventHash(values);
     }
 
+    // for testing
     Long getClock() {
-        return stringLongRedisTemplate.opsForValue().get(clockKey);
+        return stringLongRedisTemplate.opsForValue().get( clockKey );
     }
+
 
 }

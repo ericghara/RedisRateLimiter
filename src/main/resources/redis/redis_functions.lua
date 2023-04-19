@@ -1,6 +1,6 @@
 #!lua name=event_functions
 
--- keys [event, keyPrefix]
+-- keys [eventKey, clockKey]
 -- args [time, durationMillis]
 -- returns: Table[Table[prevTime, prevIsValid], Table[curTime,curIsValid]]
 -- note: for new keys [prevTime, prevIsValid] will be null and an empty table will be returned b/c of how lua handles null keys
@@ -8,42 +8,46 @@ local function put_event(keys, args)
     if (#keys ~= 2) or (#args ~= 2) then
         return redis.error_reply("Incorrect # of keys keys [event, clockKey] or args [time, durationMillis].")
     end
-    local CLOCK_ELEMENT = "CLOCK"
-    local EVENT_ELEMENT = "EVENT"
     local is_valid_hkey = "is_valid"
     local time_hkey = "time"
+    local retired_hkey = "retired"
 
-    local event = keys[1]
-    local prefix = keys[2]
+    local eventKey = keys[1]
+    local clockKey = keys[2]
 
     local newTime = tonumber(args[1])
     local durationMillis = tonumber(args[2])
+
+
 
     if not (newTime and durationMillis) then
         -- tonumber returns nil on number conversion error
         return redis.error_reply("Unable to convert time or durationMillis to a number")
     end
 
-    local function encodeKey(elements)
-        local DELIMITER = ":"
-        return table.concat(elements, DELIMITER);
-    end
-
-    local eventKey = encodeKey({ prefix, EVENT_ELEMENT, event })
-
-    local function state_changed(updatedTime, updatedIsValid)
-        redis.call("HMSET", eventKey, time_hkey, updatedTime, is_valid_hkey, updatedIsValid)
-        redis.call("expire", eventKey, math.ceil(2 * durationMillis / 1000))
-        redis.call("INCR", encodeKey({ prefix, CLOCK_ELEMENT }))
-        return
-    end
-
     local curState = redis.call('HMGET', eventKey, time_hkey, is_valid_hkey)
     -- older lua versions cannot unpack nil
     local curTime = tonumber(curState[1])
     local isValid = tonumber(curState[2])
+    local updatedRetired = tonumber(curState[3]) -- initialized as current state of updated retired, may mutate
     local updatedTime = nil
     local updatedIsValid = nil
+
+    local function state_changed()
+        if isValid == 1 and updatedIsValid == 1 and curTime < updatedTime then
+            updatedRetired = curTime;
+        end
+        if updatedRetired then
+            redis.call("HMSET", eventKey, time_hkey, updatedTime, is_valid_hkey, updatedIsValid, retired_hkey, updatedRetired)
+        else
+            -- cannot call hmset with null hash value, prefer not to use sentinel
+            redis.call("HMSET", eventKey, time_hkey, updatedTime, is_valid_hkey, updatedIsValid)
+        end
+        redis.call("EXPIRE", eventKey, math.ceil(2 * durationMillis / 1000))
+        redis.call("INCR", clockKey)
+        return
+    end
+
     if (curTime == nil) or (curTime + durationMillis <= newTime) then
         updatedTime, updatedIsValid = newTime, 1
         --    nextTime in past but no conflict
@@ -57,13 +61,14 @@ local function put_event(keys, args)
         updatedTime, updatedIsValid = curTime, isValid
     end
 
-    if (curTime ~= updatedTime or isValid ~= updatedIsValid) then -- lua doesn't natively support table equality
+    if (curTime ~= updatedTime or isValid ~= updatedIsValid) then
+        -- lua doesn't natively support table equality
         state_changed(updatedTime, updatedIsValid)
     end
 
-    local nextState = {updatedTime, updatedIsValid}
-    curState = {curTime, isValid} -- converting to numeric type
+    local nextState = { updatedTime, updatedIsValid }
+    curState = { curTime, isValid } -- converting to numeric type
     return { curState, nextState }
 end
 
-redis.register_function("put_event", put_event)
+redis.register_function("PUT_EVENT", put_event)

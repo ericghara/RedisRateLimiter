@@ -65,7 +65,6 @@ class EventExpiryServiceIntTest {
         connection.commands().flushAll();
     }
 
-
     @Test
     @Timeout(2)
     void pollsEvents() throws InterruptedException {
