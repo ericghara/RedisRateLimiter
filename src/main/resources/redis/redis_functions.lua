@@ -32,6 +32,7 @@ local function put_event(keys, args)
     local updatedRetired = tonumber(curState[3]) -- initialized as current state of updated retired, may mutate
     local updatedTime = nil
     local updatedIsValid = nil
+    local updatedClock = nil
 
     local function state_changed()
         if isValid == 1 and updatedIsValid == 1 and curTime < updatedTime then
@@ -44,20 +45,20 @@ local function put_event(keys, args)
             redis.call("HMSET", eventKey, time_hkey, updatedTime, is_valid_hkey, updatedIsValid)
         end
         redis.call("EXPIRE", eventKey, math.ceil(2 * durationMillis / 1000))
-        redis.call("INCR", clockKey)
+        updatedClock = redis.call("INCR", clockKey)
         return
     end
 
     if (curTime == nil) or (curTime + durationMillis <= newTime) then
         updatedTime, updatedIsValid = newTime, 1
-        --    nextTime in past but no conflict
+        --    nextTime in previous but no conflict
     elseif (newTime < curTime) and (newTime + durationMillis <= curTime) then
         updatedTime, updatedIsValid = curTime, isValid
         --    there was a conflict and we need to change db state
     elseif (newTime > curTime) or (isValid == 1) then
         updatedTime, updatedIsValid = math.max(curTime, newTime), 0
     else
-        -- no state change (new time is in past and no conflict)
+        -- no state change (new time is in previous and no conflict)
         updatedTime, updatedIsValid = curTime, isValid
     end
 
@@ -68,7 +69,7 @@ local function put_event(keys, args)
 
     local nextState = { updatedTime, updatedIsValid }
     curState = { curTime, isValid } -- converting to numeric type
-    return { curState, nextState }
+    return { curState, nextState,  updatedClock}  -- updatedClock nil unless state changed
 end
 
 redis.register_function("PUT_EVENT", put_event)

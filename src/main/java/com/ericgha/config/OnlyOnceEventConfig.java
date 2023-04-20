@@ -1,6 +1,6 @@
 package com.ericgha.config;
 
-import com.ericgha.dao.EventMap;
+import com.ericgha.dao.OnlyOnceMap;
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventStatus;
 import com.ericgha.dto.EventTime;
@@ -8,7 +8,7 @@ import com.ericgha.exception.RetryableException;
 import com.ericgha.service.EventQueueSnapshotService;
 import com.ericgha.service.OnlyOnceEventService;
 import com.ericgha.service.data.EventExpiryService;
-import com.ericgha.service.data.EventMapService;
+import com.ericgha.service.data.OnlyOnceEventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
 import com.ericgha.service.event_transformer.EventMapper;
@@ -39,6 +39,7 @@ public class OnlyOnceEventConfig {
     @Value("${app.once-only-event.event-duration-millis}")
     long eventDuration;
 
+    // todo move these to their own config class
     @Bean
     @Qualifier("eventMapRetryTemplate")
     RetryTemplate eventMapRetry(@Value("${app.once-only-event.event-map.retry.initial-interval}") long initialInterval,
@@ -72,10 +73,10 @@ public class OnlyOnceEventConfig {
 
     @Bean
     @Qualifier("onceOnlyEventMapService")
-    EventMapService onceOnlyEventMap(@Value("${app.once-only-event.event-map.key-prefix}") String keyPrefix,
-                                     @Qualifier("eventMapRetryTemplate") RetryTemplate retryTemplate) {
-        EventMap eventMap = new EventMap( stringRedisTemplate, eventDuration );
-        return new EventMapService( eventMap, keyPrefix, retryTemplate );
+    OnlyOnceEventMapService onceOnlyEventMap(@Value("${app.once-only-event.event-map.key-prefix}") String keyPrefix,
+                                             @Qualifier("eventMapRetryTemplate") RetryTemplate retryTemplate) {
+        OnlyOnceMap eventMap = new OnlyOnceMap( stringRedisTemplate, eventDuration );
+        return new OnlyOnceEventMapService( eventMap, keyPrefix, retryTemplate );
     }
 
     @Bean
@@ -85,7 +86,7 @@ public class OnlyOnceEventConfig {
             @Value("${app.once-only-event.max-events}") long maxEvents,
             SimpMessagingTemplate simpMessagingTemplate,
             @Qualifier("onceOnlyEventQueueService") EventQueueService eventQueueService,
-            @Qualifier("onceOnlyEventMapService") EventMapService eventMapService) {
+            @Qualifier("onceOnlyEventMapService") OnlyOnceEventMapService eventMapService) {
         return new OnlyOnceEventService( stompPrefix, maxEvents, simpMessagingTemplate, eventQueueService,
                                          eventMapService );
     }

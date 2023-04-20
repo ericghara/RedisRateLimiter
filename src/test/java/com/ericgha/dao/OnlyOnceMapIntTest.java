@@ -18,7 +18,7 @@ import java.util.UUID;
 
 @EnableRedisTestContainer
 @SpringBootTest(classes = {RedisConfig.class})
-public class EventMapIntTest {
+public class OnlyOnceMapIntTest {
 
 
     private static final int EVENT_DURATION = 10_000;
@@ -27,11 +27,11 @@ public class EventMapIntTest {
     @Autowired
     @Qualifier("stringRedisTemplate")
     FunctionRedisTemplate<String, String> template;
-    private EventMap eventMap;
+    private OnlyOnceMap eventMap;
 
     @BeforeEach
     void before() {
-        eventMap = new EventMap( template, EVENT_DURATION );
+        eventMap = new OnlyOnceMap( template, EVENT_DURATION );
     }
 
     @AfterEach

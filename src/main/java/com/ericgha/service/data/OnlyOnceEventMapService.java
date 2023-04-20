@@ -1,6 +1,6 @@
 package com.ericgha.service.data;
 
-import com.ericgha.dao.EventMap;
+import com.ericgha.dao.OnlyOnceMap;
 import com.ericgha.dto.EventTime;
 import com.ericgha.exception.DirtyStateException;
 import org.springframework.retry.support.RetryTemplate;
@@ -11,15 +11,15 @@ import org.springframework.retry.support.RetryTemplate;
  * <em>Note: </em> Decided to take multiplex approach over using multiple DBs as this is a much lighter
  * and does not require multiple connection factories.
  */
-public class EventMapService {
+public class OnlyOnceEventMapService {
 
     //  delimiter b/t prefix and key; i.e {PREFIX}.{KEY} for ELEMENT_SEPARATOR = '.'
     private static final char ELEMENT_DELIMITER = '.';
-    private final EventMap eventMap;
+    private final OnlyOnceMap eventMap;
     private final String keyPrefix;
     private final RetryTemplate retryTemplate;
 
-    public EventMapService(EventMap eventMap, String keyPrefix, RetryTemplate retryTemplate) {
+    public OnlyOnceEventMapService(OnlyOnceMap eventMap, String keyPrefix, RetryTemplate retryTemplate) {
         // Qualifier only used for testing
         this.eventMap = eventMap;
         this.keyPrefix = keyPrefix;

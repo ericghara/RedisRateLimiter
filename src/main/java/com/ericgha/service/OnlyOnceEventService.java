@@ -5,7 +5,7 @@ import com.ericgha.dto.Versioned;
 import com.ericgha.dto.message.SubmittedEventMessage;
 import com.ericgha.dto.message.PublishedEventMessage;
 import com.ericgha.exception.DirtyStateException;
-import com.ericgha.service.data.EventMapService;
+import com.ericgha.service.data.OnlyOnceEventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
 import org.slf4j.Logger;
@@ -19,11 +19,11 @@ public class OnlyOnceEventService {
     private final long maxEvents;
     private final SimpMessagingTemplate msgTemplate;
     private final EventQueueService eventQueueService;
-    private final EventMapService eventMapService;
+    private final OnlyOnceEventMapService eventMapService;
     private final Logger log;
 
     public OnlyOnceEventService(String messagePrefix, long maxEvents, SimpMessagingTemplate msgTemplate,
-                                EventQueueService eventQueueService, EventMapService eventMapService) {
+                                EventQueueService eventQueueService, OnlyOnceEventMapService eventMapService) {
         this.log = LoggerFactory.getLogger( this.getClass().getName() );
         this.messagePrefix = messagePrefix;
         this.maxEvents = maxEvents;

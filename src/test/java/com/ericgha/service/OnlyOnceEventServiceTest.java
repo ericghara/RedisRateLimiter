@@ -4,7 +4,7 @@ import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
 import com.ericgha.dto.message.PublishedEventMessage;
 import com.ericgha.exception.DirtyStateException;
-import com.ericgha.service.data.EventMapService;
+import com.ericgha.service.data.OnlyOnceEventMapService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.event_consumer.EventConsumer;
 import org.junit.jupiter.api.Assertions;
@@ -30,7 +30,7 @@ public class OnlyOnceEventServiceTest {
     EventQueueService eventQueueService;
 
     @Mock
-    EventMapService eventMapService;
+    OnlyOnceEventMapService eventMapService;
 
     OnlyOnceEventService onlyOnceEventService;
 

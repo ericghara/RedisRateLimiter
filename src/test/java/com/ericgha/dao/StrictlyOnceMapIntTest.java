@@ -5,6 +5,7 @@ import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventHash;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.TimeIsValid;
+import com.ericgha.dto.TimeIsValidDiff;
 import com.ericgha.test_fixtures.EnableRedisTestContainer;
 import junit.framework.AssertionFailedError;
 import org.junit.jupiter.api.AfterEach;
@@ -12,6 +13,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,34 +24,29 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.lang.Nullable;
 
 import java.time.Instant;
-import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @EnableRedisTestContainer
 @SpringBootTest(classes = {RedisConfig.class})
 public class StrictlyOnceMapIntTest {
 
-    private static final int EVENT_DURATION = 10_000;
-    private static final String KEY_PREFIX = "STRICTLY_ONCE";
-    private static final String CLOCK_ELEMENT = "CLOCK";
+    private static final long EVENT_DURATION = 10_000;
+    private static final String CLOCK_KEY = "CLOCK";
     @Autowired
     @Qualifier("stringLongRedisTemplate")
     FunctionRedisTemplate<String, Long> stringLongRedisTemplate;
     @Autowired
     RedisConnectionFactory connectionFactory;
+
     StrictlyOnceMap strictlyOnceMap;
 
-    // expectedTImeAndIsValid of an empty list is equivilent to both values being null (this is mirroring how redis handles table null returns)
-    static void assertConsistent(TimeIsValid expectedTV, @Nullable Long expectedRetired, EventHash found,
-                                 String message) throws AssertionFailedError {
-        Assertions.assertEquals( new EventHash( expectedTV.time(), expectedTV.isValid(), expectedRetired ), found,
-                                 message );
-    }
-
     @BeforeEach
-    void before() {
-        this.strictlyOnceMap =
-                new StrictlyOnceMap( EVENT_DURATION, KEY_PREFIX, CLOCK_ELEMENT, stringLongRedisTemplate );
+    public void beforeEach() {
+        this.strictlyOnceMap = new StrictlyOnceMap(stringLongRedisTemplate);
     }
 
     @AfterEach
@@ -56,138 +55,104 @@ public class StrictlyOnceMapIntTest {
         connection.commands().flushAll();
     }
 
-    @Test
-    @DisplayName("putEvent with no recent events, expected return")
-    void putEventNewEvent() {
-        EventTime eventTime = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        List<TimeIsValid> found = strictlyOnceMap.putEvent( eventTime );
-        List<TimeIsValid> expected =
-                List.of( new TimeIsValid( null, null ), new TimeIsValid( eventTime.time(), true ) );
-        Assertions.assertEquals( expected, found );
-        assertConsistent( found.get( 1 ), null, strictlyOnceMap.getEventHash( eventTime.event() ),
-                          "expected hash state" );
-        Assertions.assertEquals( 1, strictlyOnceMap.getClock() );
+    static Stream<Arguments> returnValueTestSource() {
+
+        return Stream.of(
+                // format {expected return diff, second time, test label}
+                arguments(new TimeIsValidDiff( new TimeIsValid( null, null ), new TimeIsValid( 0L, true ), 1L ), 0L, "Empty Map, no conflict"),
+                arguments( new TimeIsValidDiff( new TimeIsValid( 0L, true ), new TimeIsValid( EVENT_DURATION, true ), 1L ), EVENT_DURATION, "First earlier is valid, Second Later, no conflict"),
+                arguments( new TimeIsValidDiff( new TimeIsValid( 0L, false ), new TimeIsValid( EVENT_DURATION, true ), 1L ), EVENT_DURATION, "First earlier not valid, Second Later, no conflict"),
+                arguments(new TimeIsValidDiff(new TimeIsValid( 0L, true ), new TimeIsValid( 1L, false ), 1L ), 1L, "First is valid earlier, Second time later, has conflict"),
+                arguments(new TimeIsValidDiff(new TimeIsValid( 0L, false ), new TimeIsValid( 1L, false ), 1L ), 1L, "First earlier is not valid, Second time later, has conflict"),
+                arguments(new TimeIsValidDiff( new TimeIsValid( 0L, true ), new TimeIsValid( 0L, false ), 1L ), 0L, "First is valid, Second same time as first, conflict"),
+                arguments(new TimeIsValidDiff( new TimeIsValid( 0L, false ), new TimeIsValid( 0L, false ), null ), 0L, "First is not valid, Second same time as first, conflict"),
+                arguments(new TimeIsValidDiff(new TimeIsValid( 1L, true ), new TimeIsValid( 1L, false ), 1L ), 0L, "First later is valid, second time earlier, conflict"),
+                arguments(new TimeIsValidDiff(new TimeIsValid( 1L, false ), new TimeIsValid( 1L, false ), null ), 0L, "First later is not valid, second time earlier, conflict"),
+                arguments( new TimeIsValidDiff( new TimeIsValid( EVENT_DURATION, true ), new TimeIsValid( EVENT_DURATION, true ), null ), 0L, "First later is valid, Second time earlier than first, NO conflict"),
+                arguments( new TimeIsValidDiff( new TimeIsValid( EVENT_DURATION, false ), new TimeIsValid( EVENT_DURATION, false ), null ), 0L, "First later is not valid, Second time earlier than first, NO conflict")
+        );
     }
 
-    @Test
-    @DisplayName(
-            "Put duplicate events, first earlier, second later, no conflict, both validated recentEvents updated to later time")
-    void putEventsFirstEarlierSecondLaterNoConflict() {
-        EventTime firstEarlier = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        strictlyOnceMap.putEvent( firstEarlier );
-        EventTime secondLater = new EventTime( "Test 1", firstEarlier.time() + EVENT_DURATION );
-        List<TimeIsValid> found = strictlyOnceMap.putEvent( secondLater );
-        List<TimeIsValid> expected =
-                List.of( new TimeIsValid( firstEarlier.time(), true ), new TimeIsValid( secondLater.time(), true ) );
-        Assertions.assertEquals( expected, found, "expected return value" );
-        assertConsistent( expected.get( 1 ), firstEarlier.time(), strictlyOnceMap.getEventHash( secondLater.event() ),
-                          "expected hash state" );
-        Assertions.assertEquals( 2, strictlyOnceMap.getClock(), "expected number of mutations" );
+    @ParameterizedTest(name = "[{index}]) {2}")
+    @MethodSource("returnValueTestSource")
+    void putEventReturnValue(TimeIsValidDiff expected, long secondTime, String _label) {
+        String event = "Test 1";
+        Long firstTime = expected.previous().time();
+        if (Objects.nonNull(firstTime)) {
+            strictlyOnceMap.setEvent( event, firstTime, expected.previous().isValid(), EVENT_DURATION );
+        }
+        TimeIsValidDiff found = strictlyOnceMap.putEvent( event, secondTime, CLOCK_KEY, EVENT_DURATION );
+        Assertions.assertEquals(expected, found, "Expected return value.");
     }
 
-    @Test
-    @DisplayName("Put 2 duplicate events with same time, is_valid set from 1 to 0")
-    void putEqualTimeEventsHaveConflictTest() {
-        EventTime eventTime = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        strictlyOnceMap.putEvent( eventTime );
-        List<TimeIsValid> found = strictlyOnceMap.putEvent( eventTime );
-        List<TimeIsValid> expected =
-                List.of( new TimeIsValid( eventTime.time(), true ), new TimeIsValid( eventTime.time(), false ) );
-        Assertions.assertEquals( expected, found, "expected return value" );
-        assertConsistent( expected.get( 1 ), null, strictlyOnceMap.getEventHash( eventTime.event() ),
-                          "expected hash state" );
-        Assertions.assertEquals( 2, strictlyOnceMap.getClock(), "expected number of mutations" );
+    static Stream<Arguments> eventHashTestSource() {
+
+        return Stream.of(
+                // format {intial state, time to put, expected end state}
+                arguments(new TimeIsValid(null, null), 0L, new EventHash(0L, true, null), "Empty Map, no conflict"),
+                arguments(new TimeIsValid(0L, true), EVENT_DURATION, new EventHash(EVENT_DURATION, true, 0L), "First earlier is valid, Second Later, no conflict"),
+                arguments(new TimeIsValid(0L, false), EVENT_DURATION, new EventHash(EVENT_DURATION, true, null), "First earlier not valid, Second Later, no conflict"),
+                arguments(new TimeIsValid(0L, true), 1L, new EventHash(1L, false, null), "First is valid earlier, Second time later, has conflict"),
+                arguments(new TimeIsValid(0L, false), 1L, new EventHash(1L, false, null), "First earlier is not valid, Second time later, has conflict"),
+                arguments(new TimeIsValid(0L, true), 0L, new EventHash(0L, false, null), "First is valid, Second same time as first, conflict"),
+                arguments(new TimeIsValid(0L, false), 0L, new EventHash(0L, false, null), "First is not valid, Second same time as first, conflict"),
+                arguments(new TimeIsValid(1L, true), 0L, new EventHash(1L, false, null), "First later is valid, second time earlier, conflict"),
+                arguments(new TimeIsValid(1L, false), 0L, new EventHash(1L, false, null), "First later is not valid, second time earlier, conflict"),
+                arguments(new TimeIsValid(EVENT_DURATION, true), 0L, new EventHash(EVENT_DURATION, true, null), "First later is valid, Second time earlier than first, NO conflict"),
+                arguments(new TimeIsValid(EVENT_DURATION, false), 0L, new EventHash(EVENT_DURATION, false, null), "First later is not valid, Second time earlier than first, NO conflict")
+                );
     }
 
-    @Test
-    @DisplayName(
-            "Put 2 conflicting events, first earlier time second later time, time updated and is_valid 1 -> 0")
-    void putLaterEventHasConflictTest() {
-        EventTime firstEarlier = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        EventTime secondLater = new EventTime( "Test 1", Instant.now().toEpochMilli() + 1 );
-        strictlyOnceMap.putEvent( firstEarlier );
-        List<TimeIsValid> found = strictlyOnceMap.putEvent( secondLater );
-        List<TimeIsValid> expected =
-                List.of( new TimeIsValid( firstEarlier.time(), true ), new TimeIsValid( secondLater.time(), false ) );
-        Assertions.assertEquals( expected, found, "expected return value" );
-        assertConsistent( expected.get( 1 ), null, strictlyOnceMap.getEventHash( firstEarlier.event() ),
-                          "expected hash state" );
-        Assertions.assertEquals( 2, strictlyOnceMap.getClock(), "2 mutations" );
+    @ParameterizedTest(name = "[{index}]) {3}")
+    @MethodSource("eventHashTestSource")
+    void putEventExpectedHashState(TimeIsValid initialState, long secondTime, EventHash expectedFinal, String _label) {
+        String eventKey = "Test 1";
+        Long firstTime = initialState.time();
+        if (Objects.nonNull(firstTime)) {
+            strictlyOnceMap.setEvent( eventKey, firstTime, initialState.isValid(), EVENT_DURATION );
+        }
+        strictlyOnceMap.putEvent(eventKey, secondTime, CLOCK_KEY, EVENT_DURATION);
+        EventHash foundHash = strictlyOnceMap.getEventHash( eventKey );
+        Assertions.assertEquals(expectedFinal, foundHash, "Redish event hash state");
     }
 
-    @Test
-    @DisplayName(
-            "Put 2 conflicting events, first later time second earlier time, time not updated and is_valid 1 -> 0")
-    void putEventConflictWhenPuttingEarlierEvent() {
-        EventTime secondEarlier = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        EventTime firstLater = new EventTime( "Test 1", Instant.now().toEpochMilli() + 1 );
-        strictlyOnceMap.putEvent( firstLater ); // notice later put first
-        List<TimeIsValid> found = strictlyOnceMap.putEvent( secondEarlier );
-        List<TimeIsValid> expected =
-                List.of( new TimeIsValid( firstLater.time(), true ), new TimeIsValid( firstLater.time(), false ) );
-        Assertions.assertEquals( expected, found, "expected return value" );
-        assertConsistent( expected.get( 1 ), null, strictlyOnceMap.getEventHash( firstLater.event() ),
-                          "expected hash state" );
-        Assertions.assertEquals( 2, strictlyOnceMap.getClock(), "expected number of mutations" );
+    static Stream<Arguments> clockStateTestSource() {
+
+        return Stream.of(
+                // format {expected return diff, second time, test label}
+                arguments(new TimeIsValid( null, null ), new EventTime( "Test 1", 0L ), 1L, "Empty Map, no conflict"),
+                arguments( new TimeIsValid( 0L, true ), new EventTime( "Test 1", EVENT_DURATION ), 1L, "First earlier is valid, Second Later, no conflict"),
+                arguments( new TimeIsValid( 0L, false ), new EventTime( "Test 1", EVENT_DURATION ), 1L, "First earlier not valid, Second Later, no conflict"),
+                arguments(new TimeIsValid( 0L, true ), new EventTime( "Test 1", 1L ), 1L, "First is valid earlier, Second time later, has conflict"),
+                arguments(new TimeIsValid( 0L, false ), new EventTime( "Test 1", 1L ), 1L, "First earlier is not valid, Second time later, has conflict"),
+                arguments(new TimeIsValid( 0L, true ), new EventTime( "Test 1", 0L), 1L, "First is valid, Second same time as first, conflict"),
+                arguments(new TimeIsValid( 0L, false ), new EventTime( "Test 1", 0L), 0L, "First is not valid, Second same time as first, conflict"),
+                arguments(new TimeIsValid( 1L, true ), new EventTime( "Test 1",0L), 1L, "First later is valid, second time earlier, conflict"),
+                arguments(new TimeIsValid( 1L, false ), new EventTime("Test 1",0L), 0L, "First later is not valid, second time earlier, conflict"),
+                arguments( new TimeIsValid( EVENT_DURATION, true ), new EventTime( "Test 1", 0L ), 0L, "First later is valid, Second time earlier than first, NO conflict"),
+                arguments( new TimeIsValid( EVENT_DURATION, false ), new EventTime( "Test 1", 0L ), 0L, "First later is not valid, Second time earlier than first, NO conflict")
+        );
     }
 
-    @Test
-    @DisplayName(
-            "putEvent no conflict, second event earlier timestamp than first, no changes to hash")
-    void putEventTwoEventsSecondEarlierThanFirstNoConflict() {
-        EventTime firstLater = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        strictlyOnceMap.putEvent( firstLater );
-        EventTime secondEarlier = new EventTime( firstLater.event(), firstLater.time() - EVENT_DURATION );
-        List<TimeIsValid> found = strictlyOnceMap.putEvent( secondEarlier );
-        List<TimeIsValid> expected =
-                List.of( new TimeIsValid( firstLater.time(), true ), new TimeIsValid( firstLater.time(), true ) );
+    @ParameterizedTest(name = "[{index}]) {3}")
+    @MethodSource("clockStateTestSource")
+    void putEventCorrectClockState(TimeIsValid timeIsValid, EventTime nextEvent, long expectedClock, String _label) {
+        String eventKey = nextEvent.event();
+        if (Objects.nonNull(timeIsValid.time())) {
+            strictlyOnceMap.setEvent( eventKey, timeIsValid.time(), timeIsValid.isValid(), EVENT_DURATION );
+        }
+        stringLongRedisTemplate.opsForValue().set(CLOCK_KEY, 0L);
+        strictlyOnceMap.putEvent( eventKey, nextEvent.time(), CLOCK_KEY, EVENT_DURATION );
+        Assertions.assertEquals(expectedClock, strictlyOnceMap.getClock(CLOCK_KEY),"Expected clock state.");
 
-        Assertions.assertEquals( expected, found, "expected return value" );
-        assertConsistent( expected.get( 1 ), null, strictlyOnceMap.getEventHash( firstLater.event() ),
-                          "expected hash state" );
-        Assertions.assertEquals( 1, strictlyOnceMap.getClock(), "expected number of mutations" );
-    }
-
-    @Test
-    @DisplayName(
-            "putEvent, first earlier, second later, has conflict, update time and is_valid 1 -> 0")
-    void putEventFirstEarlierSecondLaterHasConflict() {
-        EventTime firstEarlier = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        strictlyOnceMap.putEvent( firstEarlier );
-        EventTime secondLater = new EventTime( "Test 1", firstEarlier.time() + 1 );
-        List<TimeIsValid> found = strictlyOnceMap.putEvent( secondLater );
-        List<TimeIsValid> expected =
-                List.of( new TimeIsValid( firstEarlier.time(), true ), new TimeIsValid( secondLater.time(), false ) );
-
-        Assertions.assertEquals( expected, found, "expected return value" );
-        assertConsistent( expected.get( 1 ), null, strictlyOnceMap.getEventHash( firstEarlier.event() ),
-                          "expected hash state" );
-        Assertions.assertEquals( 2, strictlyOnceMap.getClock(), "expected number of mutations" );
-    }
-
-    @Test
-    @DisplayName(
-            "putEvent, first later, second earlier, has conflict, don't update time, is_valid 1 -> 0")
-    void putEventFirstLaterSecondEarlierHasConflict() {
-        EventTime secondEarlier = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        EventTime firstLater = new EventTime( secondEarlier.event(), secondEarlier.time() + 1 );
-        strictlyOnceMap.putEvent( firstLater );
-        List<TimeIsValid> found = strictlyOnceMap.putEvent( secondEarlier );
-        List<TimeIsValid> expected =
-                List.of( new TimeIsValid( firstLater.time(), true ), new TimeIsValid( firstLater.time(), false ) );
-
-        Assertions.assertEquals( expected, found, "expected return value" );
-        assertConsistent( expected.get( 1 ), null, strictlyOnceMap.getEventHash( firstLater.event() ),
-                          "expected hash state" );
-        Assertions.assertEquals( 2, strictlyOnceMap.getClock(), "expected number of mutations" );
     }
 
     @Test
     @DisplayName("putEvent sets expiry time for hash")
     void putEventSetsExpiry() {
         EventTime eventTime = new EventTime( "Test 1", Instant.now().toEpochMilli() );
-        strictlyOnceMap.putEvent( eventTime );
-        Long expires_milli = stringLongRedisTemplate.getExpire( strictlyOnceMap.encodeEvent( eventTime.event() ),
+        strictlyOnceMap.putEvent( eventTime.event(), eventTime.time(), CLOCK_KEY, EVENT_DURATION );
+        Long expires_milli = stringLongRedisTemplate.getExpire( eventTime.event(),
                                                                 TimeUnit.MILLISECONDS );
         Assertions.assertTrue( expires_milli <= 2 * EVENT_DURATION, "Not greater than initially set expire time" );
         Assertions.assertTrue( expires_milli >= 2 * EVENT_DURATION - 100,
@@ -200,9 +165,9 @@ public class StrictlyOnceMapIntTest {
         EventTime firstEarliest = new EventTime( "Test 1", Instant.now().toEpochMilli() );
         EventTime secondMiddle = new EventTime( "Test 1", firstEarliest.time() + EVENT_DURATION );
         EventTime thirdMiddle = new EventTime( "Test 1", secondMiddle.time() ); // conflict
-        strictlyOnceMap.putEvent( firstEarliest );
-        strictlyOnceMap.putEvent( secondMiddle );
-        strictlyOnceMap.putEvent( thirdMiddle );
+        strictlyOnceMap.putEvent( firstEarliest.event(), firstEarliest.time(), CLOCK_KEY, EVENT_DURATION );
+        strictlyOnceMap.putEvent( secondMiddle.event(), secondMiddle.time(), CLOCK_KEY, EVENT_DURATION );
+        strictlyOnceMap.putEvent( thirdMiddle.event(), thirdMiddle.time(), CLOCK_KEY, EVENT_DURATION );
         EventHash foundState = strictlyOnceMap.getEventHash( firstEarliest.event() );
         EventHash expectedState = new EventHash( thirdMiddle.time(), false, firstEarliest.time() );
         Assertions.assertEquals( expectedState, foundState );

@@ -1,11 +1,25 @@
 #!/bin/sh
-REDIS_ARGS="--requirepass password --save 60 1 --loglevel warning"
+
+REDIS_PASSWORD="password"
+REDIS_ARGS="--requirepass $REDIS_PASSWORD --save 60 1 --loglevel warning"
+
+echo "=== Waiting for server startup ==="
+redis-server $REDIS_ARGS &
+redis_pid=$!
+
+status=1
+msg="Waiting for redis-server."
+while [ $status -ne 0 ]
+do
+  echo $msg
+  sleep 0.05
+  redis-cli -a $REDIS_PASSWORD ping >/dev/null 2>/dev/null
+  status=$?
+  msg="$msg."
+done
+
 echo "=== Loading functions ==="
-#redis-server --requirepass password --save 60 1 --loglevel warning  --daemonize yes
-/entrypoint.sh &
-sleep 0.5
-cat /opt/redis-functions/redis_functions.lua | redis-cli -a password -x FUNCTION LOAD REPLACE
-redis-cli -a password shutdown
-echo "=== Rebooting redis ==="
-REDIS_ARGS="--requirepass password --save 60 1 --loglevel warning"
-/entrypoint.sh
+redis-cli -a $REDIS_PASSWORD -x FUNCTION LOAD REPLACE < /opt/redis-functions/redis_functions.lua
+echo "=== Ready ==="
+wait "$redis_pid"
+

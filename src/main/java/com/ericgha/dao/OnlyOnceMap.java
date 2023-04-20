@@ -14,21 +14,21 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
-public class EventMap {
+public class OnlyOnceMap {
 
     private final ValueOperations<String, String> valueOps;
     private final RedisTemplate<String, String> redisTemplate;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
     private long eventDurationMillis;
 
-    // todo add prefix to keys
-    public EventMap(RedisTemplate<String, String> redisTemplate,
-                    long eventDurationMillis) {
+    public OnlyOnceMap(RedisTemplate<String, String> redisTemplate,
+                       long eventDurationMillis) {
         this.valueOps = redisTemplate.opsForValue();
         this.redisTemplate = redisTemplate;
         this.setEventDuration( eventDurationMillis );
     }
 
+    // todo refactor this should be set at service level
     public void setEventDuration(long millis) throws IllegalArgumentException {
         if (millis < 0) {
             throw new IllegalArgumentException( "Event duration must be a positive long" );
@@ -42,53 +42,53 @@ public class EventMap {
     }
 
     /**
-     * Attempts to put event into map.  Put succeeds if no identical event is in the map, or an identical event is in
-     * the map with at a time of at least {@code eventDurationMillis} before this event's {@code timeMilli}
+     * Attempts to put event (@code{eventKey}) into map.  Put succeeds if no identical eventKey is in the map, or an identical eventKey is in
+     * the map with at a time of at least {@code eventDurationMillis} before this eventKey's {@code timeMilli}
      *
      * <pre>IF newEvent is absent OR (oldTime + eventDuration) <= newTime then PUT in map</pre>
      *
-     * @param event
-     * @param timeMilli time of event
+     * @param eventKey
+     * @param timeMilli time of eventKey
      * @return {@code true} if update occurred {@code false}
      * @throws DirtyStateException if a concurrent modification caused the transaction to abort.
      * @see TimeConditionalWrite#TimeConditionalWrite(String, long)
      */
-    public boolean putEvent(String event, long timeMilli) throws DirtyStateException {
-        TimeConditionalWrite condWrite = new TimeConditionalWrite( event, timeMilli );
+    public boolean putEvent(String eventKey, long timeMilli) throws DirtyStateException {
+        TimeConditionalWrite condWrite = new TimeConditionalWrite( eventKey, timeMilli );
         List<Boolean> found = redisTemplate.execute( condWrite );
         if (Objects.isNull( found ) || found.size() != 1) {
-            log.debug( "Failed to put {} : {}", event, timeMilli );
+            log.debug( "Failed to put {} : {}", eventKey, timeMilli );
             throw new DirtyStateException( "Value changed mid-transaction." );
         }
         return found.get( 0 );
     }
 
     /**
-     * Deletes an event from the map if it is equal to or older than {@code timeMilli}. {@code timeMilli}
-     * <em>must</em> be at least {@code eventDurationMillis} in the past.
+     * Deletes an event ({@code eventKey}) from the map if it is equal to or older than {@code timeMilli}. {@code timeMilli}
+     * <em>must</em> be at least {@code eventDurationMillis} in the previous.
      *
-     * @param event
-     * @param timeMilli time of event
+     * @param eventKey
+     * @param timeMilli time of eventKey
      * @return {@code true} if delete performed {@code false} if no delete performed
      * @throws DirtyStateException      if a concurrent modification caused the transaction to abort
-     * @throws IllegalArgumentException if {@code timeMilli} is not at least {@code eventDurationMillis} in the past
+     * @throws IllegalArgumentException if {@code timeMilli} is not at least {@code eventDurationMillis} in the previous
      */
-    public boolean deleteEvent(String event, long timeMilli) throws DirtyStateException, IllegalArgumentException {
+    public boolean deleteEvent(String eventKey, long timeMilli) throws DirtyStateException, IllegalArgumentException {
         if (Instant.now().toEpochMilli() < timeMilli + eventDurationMillis) {
             throw new IllegalArgumentException(
-                    String.format( "It is too soon to attempt to delete Event: %s at %d", event, timeMilli ) );
+                    String.format( "It is too soon to attempt to delete Event: %s at %d", eventKey, timeMilli ) );
         }
-        TimeConditionalDelete condDelete = new TimeConditionalDelete( event, timeMilli );
+        TimeConditionalDelete condDelete = new TimeConditionalDelete( eventKey, timeMilli );
         List<String> found = redisTemplate.execute( condDelete );
         if (Objects.isNull( found ) || found.size() != 1) {
-            log.debug( "Failed to delete {} : {}", event, timeMilli );
+            log.debug( "Failed to delete {} : {}", eventKey, timeMilli );
             throw new DirtyStateException( "Value changed mid-transaction." );
         }
         return !found.get( 0 ).isEmpty();
     }
 
-    public String get(String key) {
-        return valueOps.get( key );
+    public String get(String eventKey) {
+        return valueOps.get( eventKey );
     }
 
     static class TimeConditionalDelete implements SessionCallback<List<String>> {

@@ -3,7 +3,7 @@ package com.ericgha.service.data;
 import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.config.OnlyOnceEventConfig;
 import com.ericgha.config.RedisConfig;
-import com.ericgha.dao.EventMap;
+import com.ericgha.dao.OnlyOnceMap;
 import com.ericgha.dto.EventTime;
 import com.ericgha.exception.DirtyStateException;
 import org.junit.jupiter.api.Assertions;
@@ -22,10 +22,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class})
-public class EventMapServiceTest {
+public class OnlyOnceMapServiceTest {
 
     @MockBean
-    EventMap eventMapMock;
+    OnlyOnceMap eventMapMock;
 
     @MockBean
     @Qualifier("stringRedisTemplate")
@@ -36,7 +36,7 @@ public class EventMapServiceTest {
     FunctionRedisTemplate<String, EventTime> eventTimeRedisTemplate;
 
 
-    EventMapService eventMapService;
+    OnlyOnceEventMapService eventMapService;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -56,7 +56,7 @@ public class EventMapServiceTest {
 
     @BeforeEach
     void before(@Qualifier("eventMapRetry") RetryTemplate retryTemplate) {
-        this.eventMapService = new EventMapService( eventMapMock, "prefix", retryTemplate );
+        this.eventMapService = new OnlyOnceEventMapService( eventMapMock, "prefix", retryTemplate );
 
     }
 
@@ -82,7 +82,7 @@ public class EventMapServiceTest {
     }
 
     @Test
-    @DisplayName("tryAddEvent calls EventMap#putEvent with the expected key")
+    @DisplayName("tryAddEvent calls OnlyOnceMap#putEvent with the expected key")
     public void tryAddEventUsesExpectedKey() {
         Mockito.doReturn( true ).when( eventMapMock ).putEvent( Mockito.anyString(), Mockito.anyLong() );
         String event = "testEvent";
@@ -93,7 +93,7 @@ public class EventMapServiceTest {
     }
 
     @Test
-    @DisplayName("tryDeleteEvent calls EventMap#deleteEvent")
+    @DisplayName("tryDeleteEvent calls OnlyOnceMap#deleteEvent")
     public void tryDeleteEventCallsDeleteEvent() {
         Mockito.doReturn( true )
                 .when( eventMapMock )
@@ -103,7 +103,7 @@ public class EventMapServiceTest {
     }
 
     @Test
-    @DisplayName("tryDeleteEvent calls EventMap#deleteEvent with the expected key")
+    @DisplayName("tryDeleteEvent calls OnlyOnceMap#deleteEvent with the expected key")
     public void tryDeleteEventUsesExpectedKey() {
         Mockito.doReturn( true )
                 .when( eventMapMock )
