@@ -50,18 +50,6 @@ public class OnlyOnceEventConfig {
 
     // todo move these to their own config class
     @Bean
-    @Qualifier("eventMapRetryTemplate")
-    RetryTemplate eventMapRetry(@Value("${app.only-once-event.event-map.retry.initial-interval}") long initialInterval,
-                                @Value("${app.only-once-event.event-map.retry.multiplier}") double multiplier,
-                                @Value("${app.only-once-event.event-map.retry.num-attempts}") int numAttempts) {
-        return RetryTemplate.builder()
-                .exponentialBackoff( initialInterval, multiplier, 3_600_000, true )
-                .maxAttempts( numAttempts )
-                .retryOn( RetryableException.class )
-                .build();
-    }
-
-    @Bean
     @Qualifier("eventQueueRetryTemplate")
     RetryTemplate eventQueueRetry(@Value("${app.only-once-event.event-queue.retry.num-attempts}") int numAttempts,
                                   @Value("${app.only-once-event.event-queue.retry.interval}") long interval) {
@@ -82,10 +70,9 @@ public class OnlyOnceEventConfig {
 
     @Bean
     @Qualifier("onlyOnceEventMapService")
-    OnlyOnceEventMapService onlyOnceEventMap(@Qualifier("onlyOnceKeyMaker") KeyMaker keyMaker,
-                                             @Qualifier("eventMapRetryTemplate") RetryTemplate retryTemplate) {
+    OnlyOnceEventMapService onlyOnceEventMap(@Qualifier("onlyOnceKeyMaker") KeyMaker keyMaker) {
         OnlyOnceMap eventMap = new OnlyOnceMap( stringTemplate );
-        return new OnlyOnceEventMapService( eventMap, eventDuration, keyMaker, retryTemplate );
+        return new OnlyOnceEventMapService( eventMap, eventDuration, keyMaker );
     }
 
     @Bean

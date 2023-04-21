@@ -3,7 +3,6 @@ package com.ericgha.service.event_consumer;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
 import com.ericgha.dto.message.PublishedEventMessage;
-import com.ericgha.exception.DirtyStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;

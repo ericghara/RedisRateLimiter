@@ -3,8 +3,10 @@ package com.ericgha.service.data;
 import com.ericgha.dao.OnlyOnceMap;
 import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventTime;
-import com.ericgha.exception.DirtyStateException;
-import org.springframework.retry.support.RetryTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Instant;
 
 /**
  * Event map DAO is not prefix aware.  Injects prefix to multiplex multiple EventMaps on one DB instance.
@@ -14,35 +16,35 @@ import org.springframework.retry.support.RetryTemplate;
  */
 public class OnlyOnceEventMapService implements EventMapService {
 
+    private final Logger log;
     private final OnlyOnceMap eventMap;
     private final KeyMaker keyMaker;
-    private final RetryTemplate retryTemplate;
     private final long eventDurationMilli;
 
-    public OnlyOnceEventMapService(OnlyOnceMap eventMap, long eventDurationMilli, KeyMaker keyMaker, RetryTemplate retryTemplate) {
-        // Qualifier only used for testing
+    public OnlyOnceEventMapService(OnlyOnceMap eventMap, long eventDurationMilli, KeyMaker keyMaker) {
+        this.log = LoggerFactory.getLogger( this.getClass().getName() + ":" + keyMaker.keyPrefix() );
         this.eventDurationMilli = validateEventDuration( eventDurationMilli );
         this.eventMap = eventMap;
         this.keyMaker = keyMaker;
-        this.retryTemplate = retryTemplate;
     }
 
-    public boolean putEvent(String event, long timeMilli) throws DirtyStateException {
+    public boolean putEvent(String event, long timeMilli) {
         String key = keyMaker.generateEventKey( event );
-        return retryTemplate.execute( _context -> eventMap.putEvent( key, timeMilli, eventDurationMilli ) );
+        long expireTimeMilli = timeMilli + eventDurationMilli;
+        long now = Instant.now().toEpochMilli();
+        if (expireTimeMilli <= now) {
+            log.warn( "Received an event which has already ended." );
+            return false;
+        }
+        if (timeMilli > now) {
+            log.warn( "Received an event beginning in the future." );
+            return false;
+        }
+        return eventMap.putEvent( key, timeMilli, expireTimeMilli );
     }
 
-    public boolean putEvent(EventTime eventTime) throws DirtyStateException {
+    public boolean putEvent(EventTime eventTime) {
         return putEvent( eventTime.event(), eventTime.time() );
-    }
-
-    public boolean tryDeleteEvent(String event, long timeMilli) throws DirtyStateException {
-        String key = keyMaker.generateEventKey( event );
-        return retryTemplate.execute( _context -> eventMap.deleteEvent( key, timeMilli, eventDurationMilli ) );
-    }
-
-    public boolean tryDeleteEvent(EventTime eventTime) throws DirtyStateException {
-        return tryDeleteEvent( eventTime.event(), eventTime.time() );
     }
 
     public String keyPrefix() {
