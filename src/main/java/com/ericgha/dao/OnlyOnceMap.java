@@ -13,33 +13,21 @@ import org.springframework.data.redis.core.ValueOperations;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 public class OnlyOnceMap {
 
     private final ValueOperations<String, String> valueOps;
     private final RedisTemplate<String, String> redisTemplate;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
-    private long eventDurationMillis;
 
-    public OnlyOnceMap(RedisTemplate<String, String> redisTemplate,
-                       long eventDurationMillis) {
+    public OnlyOnceMap(RedisTemplate<String, String> redisTemplate) {
         this.valueOps = redisTemplate.opsForValue();
         this.redisTemplate = redisTemplate;
-        this.setEventDuration( eventDurationMillis );
     }
 
-    // todo refactor this should be set at service level
+
     // todo should use <String,Long> redisTemplate
-    public void setEventDuration(long millis) throws IllegalArgumentException {
-        if (millis < 0) {
-            throw new IllegalArgumentException( "Event duration must be a positive long" );
-        }
-        this.eventDurationMillis = millis;
-    }
-
-    public long eventDuration() {
-        return this.eventDurationMillis;
-    }
 
     // Convenience method for testing.  Returns previous key value or null
     String put(String key, String value) {
@@ -57,10 +45,10 @@ public class OnlyOnceMap {
      * @param timeMilli time of eventKey
      * @return {@code true} if update occurred {@code false}
      * @throws DirtyStateException if a concurrent modification caused the transaction to abort.
-     * @see TimeConditionalWrite#TimeConditionalWrite(String, long)
+     * @see TimeConditionalWrite#TimeConditionalWrite(String, long, long)
      */
-    public boolean putEvent(String eventKey, long timeMilli) throws DirtyStateException {
-        TimeConditionalWrite condWrite = new TimeConditionalWrite( eventKey, timeMilli );
+    public boolean putEvent(String eventKey, long timeMilli, long eventDurationMilli) throws DirtyStateException {
+        TimeConditionalWrite condWrite = new TimeConditionalWrite( eventKey, timeMilli, eventDurationMilli );
         List<Boolean> found = redisTemplate.execute( condWrite );
         if (Objects.isNull( found ) || found.size() != 1) {
             log.debug( "Failed to put {} : {}", eventKey, timeMilli );
@@ -81,8 +69,8 @@ public class OnlyOnceMap {
      * @throws IllegalArgumentException if {@code timeMilli} is not at least {@code eventDurationMillis} in the
      *                                  previous
      */
-    public boolean deleteEvent(String eventKey, long timeMilli) throws DirtyStateException, IllegalArgumentException {
-        if (Instant.now().toEpochMilli() < timeMilli + eventDurationMillis) {
+    public boolean deleteEvent(String eventKey, long timeMilli, long eventDurationMilli) throws DirtyStateException, IllegalArgumentException {
+        if (Instant.now().toEpochMilli() < timeMilli + eventDurationMilli) {
             throw new IllegalArgumentException(
                     String.format( "It is too soon to attempt to delete Event: %s at %d", eventKey, timeMilli ) );
         }
@@ -157,10 +145,11 @@ public class OnlyOnceMap {
         }
     }
 
-    class TimeConditionalWrite implements SessionCallback<List<Boolean>> {
+    static class TimeConditionalWrite implements SessionCallback<List<Boolean>> {
 
         private final String event;
         private final long time;
+        private final long eventDurationMilli;
 
         /**
          * If no identical event exists in the map the new event will be added.  If an identical {@code event} exists in
@@ -173,9 +162,10 @@ public class OnlyOnceMap {
          * @param event event to be written
          * @param time  time of the event
          */
-        TimeConditionalWrite(String event, long time) {
+        TimeConditionalWrite(String event, long time, long eventDurationMilli) {
             this.event = event;
             this.time = time;
+            this.eventDurationMilli = eventDurationMilli;
         }
 
         /**
@@ -188,7 +178,7 @@ public class OnlyOnceMap {
         @SuppressWarnings("unchecked")
         public List<Boolean> execute(RedisOperations operations) throws DataAccessException {
             // absent can modify atomically
-            if (operations.opsForValue().setIfAbsent( event, Long.toString( time ) )) {
+            if (operations.opsForValue().setIfAbsent( event, Long.toString( time ), eventDurationMilli, TimeUnit.MILLISECONDS )) {
                 return List.of( true );
             }
             // optimistic lock
@@ -196,8 +186,8 @@ public class OnlyOnceMap {
             Object lastTime = operations.opsForValue().get( event );
             operations.multi();
             // present but expired
-            if (Long.parseLong( lastTime.toString() ) + eventDurationMillis <= time) {
-                operations.opsForValue().set( event, Long.toString( time ) );
+            if (Long.parseLong( lastTime.toString() ) + eventDurationMilli <= time) {
+                operations.opsForValue().set( event, Long.toString( time ), eventDurationMilli, TimeUnit.MILLISECONDS );
                 // returns an empty list if concurrent modification was made
                 return operations.exec();
             }

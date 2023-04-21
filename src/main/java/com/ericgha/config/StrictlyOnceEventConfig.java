@@ -6,7 +6,7 @@ import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventStatus;
 import com.ericgha.dto.EventTime;
 import com.ericgha.service.EventQueueSnapshotService;
-import com.ericgha.service.StrictlyOnceEventService;
+import com.ericgha.service.EventService;
 import com.ericgha.service.data.EventExpiryService;
 import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.data.StrictlyOnceMapService;
@@ -103,12 +103,12 @@ public class StrictlyOnceEventConfig {
 
     @Bean
     @Qualifier("strictlyOnceEventService")
-    StrictlyOnceEventService strictlyOnceEventService(StrictlyOnceMapService mapService,
-                                                      @Qualifier("strictlyOnceEventQueueService")
+    EventService strictlyOnceEventService(StrictlyOnceMapService mapService,
+                                          @Qualifier("strictlyOnceEventQueueService")
                                                       EventQueueService eventQueueService,
-                                                      SimpMessagingTemplate simpMessagingTemplate) {
-        return new StrictlyOnceEventService( stompPrefix, maxEvents, simpMessagingTemplate, eventQueueService,
-                                             mapService );
+                                          SimpMessagingTemplate simpMessagingTemplate) {
+        return new EventService( stompPrefix, maxEvents, simpMessagingTemplate, eventQueueService,
+                                 mapService );
     }
 
     @Bean

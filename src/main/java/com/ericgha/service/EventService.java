@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
-public class StrictlyOnceEventService implements RateLimiter {
+public class EventService implements RateLimiter {
 
     private final Logger log;
     private final String messagePrefix;
@@ -20,8 +20,8 @@ public class StrictlyOnceEventService implements RateLimiter {
     private final EventMapService mapService;
 
 
-    public StrictlyOnceEventService(String messagePrefix, long maxEvents, SimpMessagingTemplate msgTemplate,
-                                    EventQueueService queueService, EventMapService mapService) {
+    public EventService(String messagePrefix, long maxEvents, SimpMessagingTemplate msgTemplate,
+                        EventQueueService queueService, EventMapService mapService) {
         this.log = LoggerFactory.getLogger( String.format( "%s:%s", this.getClass().getName(), mapService.keyPrefix() ) );
         this.messagePrefix = messagePrefix;
         this.maxEvents = maxEvents;
@@ -30,7 +30,6 @@ public class StrictlyOnceEventService implements RateLimiter {
         this.mapService = mapService;
     }
 
-    //    public void setPolledEventConsumer(EventConsumer )
     @Override
     public HttpStatus acceptEvent(EventTime eventTime) {
         if (queueService.size() >= maxEvents) {

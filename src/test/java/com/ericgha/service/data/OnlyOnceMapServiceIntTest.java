@@ -24,7 +24,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class})
-public class OnlyOnceMapServiceTest {
+public class OnlyOnceMapServiceIntTest {
 
     @MockBean
     OnlyOnceMap eventMapMock;
@@ -41,6 +41,8 @@ public class OnlyOnceMapServiceTest {
     @Qualifier("onlyOnceKeyMaker")
     KeyMaker keyMaker;
 
+    long EVENT_DURATION = 1_000L;
+
     OnlyOnceEventMapService eventMapService;
 
     @DynamicPropertySource
@@ -56,21 +58,22 @@ public class OnlyOnceMapServiceTest {
         registry.add( "app.redis.disable-bean.string-long-redis-template", () -> true );
         registry.add( "app.only-once-event.disable-bean.event-expiry-service", () -> true );
         registry.add( "app.only-once-event.disable-bean.event-queue-snapshot-service", () -> true );
-        registry.add( "app.only-once-event.disable-bean.only-once-event-service", () -> true );
+        registry.add( "app.only-once-event.disable-bean.event-service", () -> true );
+        registry.add( "app.only-once-event.disable-bean.event-publisher", () -> true);
     }
 
     @BeforeEach
     void before(@Qualifier("eventMapRetry") RetryTemplate retryTemplate) {
-        this.eventMapService = new OnlyOnceEventMapService( eventMapMock, keyMaker, retryTemplate );
+        this.eventMapService = new OnlyOnceEventMapService( eventMapMock, EVENT_DURATION, keyMaker, retryTemplate );
     }
 
     @Test
     @DisplayName("Called num-attempts times and throws when all invocations fail")
     public void tryAddEventAllInvocationsFail() {
-        when( eventMapMock.putEvent( Mockito.anyString(), Mockito.anyLong() ) ).thenThrow(
+        when( eventMapMock.putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() ) ).thenThrow(
                 new DirtyStateException( "Dummy Exception" ) );
         Assertions.assertThrows( DirtyStateException.class, () -> eventMapService.putEvent( "testEvent", 123 ) );
-        Mockito.verify( eventMapMock, times( 5 ) ).putEvent( Mockito.anyString(), Mockito.anyLong() );
+        Mockito.verify( eventMapMock, times( 5 ) ).putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() );
     }
 
     @Test
@@ -80,20 +83,20 @@ public class OnlyOnceMapServiceTest {
                 .doThrow( new DirtyStateException() )
                 .doReturn( true )
                 .when( eventMapMock )
-                .putEvent( Mockito.anyString(), Mockito.anyLong() );
+                .putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() );
         Assertions.assertTrue( eventMapService.putEvent( "testEvent", 123 ) );
-        Mockito.verify( eventMapMock, times( 3 ) ).putEvent( Mockito.anyString(), Mockito.anyLong() );
+        Mockito.verify( eventMapMock, times( 3 ) ).putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() );
     }
 
     @Test
     @DisplayName("putEvent calls OnlyOnceMap#putEvent with the expected key")
     public void tryAddEventUsesExpectedKey() {
-        Mockito.doReturn( true ).when( eventMapMock ).putEvent( Mockito.anyString(), Mockito.anyLong() );
+        Mockito.doReturn( true ).when( eventMapMock ).putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() );
         String event = "testEvent";
         long timeMilli = 123;
         eventMapService.putEvent( "testEvent", timeMilli );
         String expectedKey = keyMaker.generateEventKey( event );
-        Mockito.verify( eventMapMock ).putEvent( expectedKey, timeMilli );
+        Mockito.verify( eventMapMock ).putEvent( expectedKey, timeMilli, EVENT_DURATION );
     }
 
     @Test
@@ -101,9 +104,9 @@ public class OnlyOnceMapServiceTest {
     public void tryDeleteEventCallsDeleteEvent() {
         Mockito.doReturn( true )
                 .when( eventMapMock )
-                .deleteEvent( Mockito.anyString(), Mockito.anyLong() );
+                .deleteEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() );
         eventMapService.tryDeleteEvent( "testEvent", 123 );
-        Mockito.verify( eventMapMock ).deleteEvent( Mockito.anyString(), Mockito.anyLong() );
+        Mockito.verify( eventMapMock ).deleteEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() );
     }
 
     @Test
@@ -111,11 +114,11 @@ public class OnlyOnceMapServiceTest {
     public void tryDeleteEventUsesExpectedKey() {
         Mockito.doReturn( true )
                 .when( eventMapMock )
-                .deleteEvent( Mockito.anyString(), Mockito.anyLong() );
+                .deleteEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() );
         String event = "testEvent";
         long timeMilli = 123;
         eventMapService.tryDeleteEvent( "testEvent", timeMilli );
         String expectedKey = keyMaker.generateEventKey( event );
-        Mockito.verify( eventMapMock ).deleteEvent( expectedKey, timeMilli );
+        Mockito.verify( eventMapMock ).deleteEvent( expectedKey, timeMilli, EVENT_DURATION );
     }
 }

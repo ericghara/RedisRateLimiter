@@ -12,7 +12,7 @@ app:
       client: /topic
   only-once-event:
     event-duration-millis: 10000
-    max-events: 100
+    max-events: 10000
     key-prefix: "only-once"
     web-socket:
       element: "only-once"
@@ -33,6 +33,7 @@ app:
       event-expiry-service: false
       event-queue-snapshot-service: false
       only-once-event-service: false
+      event-publisher: false
   strictly-once-event:
     event-duration-millis: 10000
     max-events: 10000

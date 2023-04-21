@@ -17,11 +17,11 @@ public class OnlyOnceEventMapService implements EventMapService {
     private final OnlyOnceMap eventMap;
     private final KeyMaker keyMaker;
     private final RetryTemplate retryTemplate;
-    private final long eventDuration;
+    private final long eventDurationMilli;
 
-    public OnlyOnceEventMapService(OnlyOnceMap eventMap, KeyMaker keyMaker, RetryTemplate retryTemplate) {
+    public OnlyOnceEventMapService(OnlyOnceMap eventMap, long eventDurationMilli, KeyMaker keyMaker, RetryTemplate retryTemplate) {
         // Qualifier only used for testing
-        this.eventDuration = eventMap.eventDuration(); // todo event duration should be controlled by service
+        this.eventDurationMilli = validateEventDuration( eventDurationMilli );
         this.eventMap = eventMap;
         this.keyMaker = keyMaker;
         this.retryTemplate = retryTemplate;
@@ -29,7 +29,7 @@ public class OnlyOnceEventMapService implements EventMapService {
 
     public boolean putEvent(String event, long timeMilli) throws DirtyStateException {
         String key = keyMaker.generateEventKey( event );
-        return retryTemplate.execute( _context -> eventMap.putEvent( key, timeMilli ) );
+        return retryTemplate.execute( _context -> eventMap.putEvent( key, timeMilli, eventDurationMilli ) );
     }
 
     public boolean putEvent(EventTime eventTime) throws DirtyStateException {
@@ -38,7 +38,7 @@ public class OnlyOnceEventMapService implements EventMapService {
 
     public boolean tryDeleteEvent(String event, long timeMilli) throws DirtyStateException {
         String key = keyMaker.generateEventKey( event );
-        return retryTemplate.execute( _context -> eventMap.deleteEvent( key, timeMilli ) );
+        return retryTemplate.execute( _context -> eventMap.deleteEvent( key, timeMilli, eventDurationMilli ) );
     }
 
     public boolean tryDeleteEvent(EventTime eventTime) throws DirtyStateException {
@@ -47,5 +47,12 @@ public class OnlyOnceEventMapService implements EventMapService {
 
     public String keyPrefix() {
         return keyMaker.keyPrefix();
+    }
+
+    public long validateEventDuration(long millis) throws IllegalArgumentException {
+        if (millis < 0) {
+            throw new IllegalArgumentException( "Event duration must be a positive long" );
+        }
+        return millis;
     }
 }
