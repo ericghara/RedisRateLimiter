@@ -14,7 +14,6 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 
 import java.time.Instant;
-import java.util.UUID;
 
 @EnableRedisTestContainer
 @SpringBootTest(classes = {RedisConfig.class})
@@ -25,7 +24,7 @@ public class OnlyOnceMapIntTest {
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    @Qualifier("stringRedisTemplate")
+    @Qualifier("stringTemplate")
     FunctionRedisTemplate<String, String> template;
     private OnlyOnceMap eventMap;
 
@@ -43,15 +42,15 @@ public class OnlyOnceMapIntTest {
     @Test
     public void testPut() {
         String key = "Test Key";
-        String expected = UUID.randomUUID().toString();
-        eventMap.put( key, expected );
+        long expected = Instant.now().toEpochMilli();
+        eventMap.put( key, Long.toString( expected ) );
         Assertions.assertEquals( expected, eventMap.get( key ) );
     }
 
     @Test
     public void testGetNoKey() {
         String key = "Test Key";
-        String found = eventMap.get( key );
+        Long found = eventMap.get( key );
         Assertions.assertNull( found );
     }
 

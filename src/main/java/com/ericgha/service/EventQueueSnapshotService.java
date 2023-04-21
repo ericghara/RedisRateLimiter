@@ -3,9 +3,12 @@ package com.ericgha.service;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
 import com.ericgha.service.data.EventQueueService;
-import com.ericgha.service.event_transformer.EventMapper;
+import com.ericgha.service.status_mapper.EventMapper;
 import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
 import jakarta.annotation.Nullable;
+import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
 
 import java.util.List;
@@ -16,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 public class EventQueueSnapshotService {
 
+    private final Logger log;
     private final EventQueueService eventQueueService;
     private long periodMilli;
     private boolean isRunning;
@@ -29,6 +33,7 @@ public class EventQueueSnapshotService {
     private Runnable canceler;
 
     public EventQueueSnapshotService(@NonNull EventQueueService eventQueueService) {
+        this.log = LoggerFactory.getLogger( this.getClass().getName() );
         this.eventQueueService = eventQueueService;
         this.periodMilli = Long.MAX_VALUE;
         this.isRunning = false;
@@ -68,6 +73,7 @@ public class EventQueueSnapshotService {
      *
      * @return true if this was running and therefore a shutdown was performed else false
      */
+    @PreDestroy
     public synchronized boolean stop() {
         if (!isRunning) {
             return false;
@@ -85,11 +91,14 @@ public class EventQueueSnapshotService {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void snapshot() {
-        Versioned<List<EventTime>> versionedEvents = eventQueueService.getAll();
-        List<?> snapshot = versionedEvents.data().stream().map( eventMapper ).toList();
-        // this#run enforces same type for EventMapper<T> and SnapshotConsumer<T>
-        snapshotConsumer.accept( versionedEvents.clock(), (List) snapshot );
+        try {
+            Versioned<List<EventTime>> versionedEvents = eventQueueService.getAll();
+            List<?> snapshot = versionedEvents.data().stream().map( eventMapper ).toList();
+            // this#run enforces same type for EventMapper<T> and SnapshotConsumer<T>
+            snapshotConsumer.accept( versionedEvents.clock(), (List) snapshot );
+            log.debug( "Snapshot for queue: {} completed successfully.", eventQueueService.queueKey() );
+        } catch (Exception e) {
+            log.error( "Snapshot for queue: {} failed with exception: {}", eventQueueService.queueKey(), e );
+        }
     }
-
-
 }

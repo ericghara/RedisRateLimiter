@@ -35,21 +35,22 @@ class EventExpiryServiceIntTest {
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    @Qualifier("stringRedisTemplate")
-    FunctionRedisTemplate<String, String> stringRedisTemplate;
+    @Qualifier("stringTemplate")
+    FunctionRedisTemplate<String, String> stringTemplate;
 
     @Autowired
+    @Qualifier("onlyOnceEventQueueService")
     EventQueueService queueService;
     InMemoryEventStore eventStore = new InMemoryEventStore();
     EventExpiryService expiryService;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add( "app.once-only-event.event-duration-millis",
+        registry.add( "app.only-once-event.event-duration-millis",
                       () -> DELAY_MILLI ); // PropertyRegistry shouldn't be read by these tests
         // disable beans
-        registry.add( "app.once-only-event.disable-bean.event-expiry-service", () -> true );
-        registry.add( "app.once-only-event.disable-bean.event-queue-snapshot-service", () -> true );
+        registry.add( "app.only-once-event.disable-bean.event-expiry-service", () -> true );
+        registry.add( "app.only-once-event.disable-bean.event-queue-snapshot-service", () -> true );
     }
 
     @BeforeEach
@@ -95,7 +96,7 @@ class EventExpiryServiceIntTest {
     @DisplayName("EventExpiryService messages with expected versions")
     @Timeout(value = 500, unit = TimeUnit.MILLISECONDS)
     void messagesWithExpectedVersions() throws InterruptedException {
-        stringRedisTemplate.opsForValue().set( queueService.clockKey(), "0" ); // set to 0 to avoid handling null key
+        stringTemplate.opsForValue().set( queueService.clockKey(), "0" ); // set to 0 to avoid handling null key
         EventTime eventTime = new EventTime( "test", 0 );
         queueService.offer( eventTime );
         while (eventStore.eventsByVersionClock().isEmpty()) { // spin

@@ -29,7 +29,8 @@
 
       const connectAction = () => {
           doTimeSync();
-          logEvent();
+          logEvent('/topic/only-once');
+          logEvent('/topic/strictly-once')
       }
 
       const doTimeSync = async () => {
@@ -46,14 +47,14 @@
           client.publish({destination: "/app/time"});
       }
 
-      const logEvent = () => {
-          let subscription = client.subscribe('/topic/only-once', message => {
+      const logEvent = (source) => {
+          let subscription = client.subscribe(source, message => {
                   let messageJson = JSON.parse(message.body);
                   if (messageJson.messageType === "KEY_FRAME") {
-                      console.log(`${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.snapshot)}`);
+                      console.log(`${source} - ${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.snapshot)}`);
                   }
                   else {
-                      console.log(`${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.eventTime)}`);
+                      console.log(`${source} - ${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.eventTime)}`);
                   }
               }
           )

@@ -2,6 +2,7 @@ package com.ericgha.controller;
 
 import com.ericgha.dto.EventTime;
 import com.ericgha.service.OnlyOnceEventService;
+import com.ericgha.service.StrictlyOnceEventService;
 import com.ericgha.service.TimeSyncService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,14 +25,18 @@ public class BroadcastController {
 
     private final OnlyOnceEventService onlyOnceEventService;
 
+    private final StrictlyOnceEventService strictlyOnceEventService;
+
     public BroadcastController(TimeSyncService timeSyncService,
                                SimpMessagingTemplate msgTemplate,
                                @Value("${app.web-socket.prefix.client}") String clientPrefix,
-                               OnlyOnceEventService onlyOnceEventService) {
+                               OnlyOnceEventService onlyOnceEventService,
+                               StrictlyOnceEventService strictlyOnceService) {
         this.msgTemplate = msgTemplate;
         this.clientPrefix = clientPrefix;
         this.timeSyncService = timeSyncService;
         this.onlyOnceEventService = onlyOnceEventService;
+        this.strictlyOnceEventService = strictlyOnceService;
     }
 
     @MessageMapping("/time")
@@ -50,9 +55,16 @@ public class BroadcastController {
         this.msgTemplate.convertAndSend( path, Instant.now().toEpochMilli() );
     }
 
-    @RequestMapping(path = "/event", method = RequestMethod.POST)
-    public void event(@RequestBody String event, HttpServletResponse response) {
+    @RequestMapping(path = "/only-once-event", method = RequestMethod.POST)
+    public void onlyOnceEvent(@RequestBody String event, HttpServletResponse response) {
         HttpStatus status = onlyOnceEventService.putEvent( new EventTime( event, Instant.now().toEpochMilli() ) );
+        response.setStatus( status.value() );
+    }
+
+    @RequestMapping(path = "/strictly-once-event", method = RequestMethod.POST)
+    public void strictlyOnceEvent(@RequestBody String event, HttpServletResponse response) {
+        HttpStatus status =
+                strictlyOnceEventService.acceptEvent( new EventTime( event, Instant.now().toEpochMilli() ) );
         response.setStatus( status.value() );
     }
 

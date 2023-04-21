@@ -44,7 +44,7 @@ public class OnlyOnceEventService {
         }
         boolean success;
         try {
-            success = eventMapService.tryAddEvent( eventTime );
+            success = eventMapService.putEvent( eventTime );
         } catch (DirtyStateException e) {
             log.debug( "Exhausted retries: {}", eventTime );
             return HttpStatus.SERVICE_UNAVAILABLE;
@@ -64,7 +64,7 @@ public class OnlyOnceEventService {
             try {
                 eventMapService.tryDeleteEvent( eventTime );
             } catch (DirtyStateException e) {
-                log.info( "Unable to delete event from EventMap: {}", versionedEvent );
+                log.info( "Unable to delete event from EventMapService: {}", versionedEvent );
             }
             PublishedEventMessage pubEventMessage = new PublishedEventMessage( versionedEvent.clock(), eventTime );
             msgTemplate.convertAndSend( messagePrefix, pubEventMessage );

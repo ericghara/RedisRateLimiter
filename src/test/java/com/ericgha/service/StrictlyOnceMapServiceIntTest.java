@@ -3,6 +3,7 @@ package com.ericgha.service;
 import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dao.StrictlyOnceMap;
+import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventTime;
 import com.ericgha.service.data.StrictlyOnceMapService;
 import com.ericgha.test_fixtures.EnableRedisTestContainer;
@@ -27,8 +28,10 @@ public class StrictlyOnceMapServiceIntTest {
     final long EVENT_DURATION = 10_000L;
     final String KEY_PREFIX = "STRICTLY_ONCE_TEST";
 
+    KeyMaker keyMaker = new KeyMaker( KEY_PREFIX);
+
     @Autowired
-    @Qualifier("stringLongRedisTemplate")
+    @Qualifier("stringLongTemplate")
     FunctionRedisTemplate<String, Long> redisTemplate;
 
     StrictlyOnceMap eventMap;
@@ -37,7 +40,7 @@ public class StrictlyOnceMapServiceIntTest {
     @BeforeEach
     void before() {
         this.eventMap = new StrictlyOnceMap(redisTemplate);
-        this.eventMapService = new StrictlyOnceMapService( eventMap, EVENT_DURATION, KEY_PREFIX );
+        this.eventMapService = new StrictlyOnceMapService( eventMap, EVENT_DURATION, keyMaker );
     }
 
     @AfterEach

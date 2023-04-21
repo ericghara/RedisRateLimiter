@@ -1,6 +1,7 @@
 package com.ericgha.service.data;
 
 import com.ericgha.dao.StrictlyOnceMap;
+import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventHash;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.TimeIsValid;
@@ -15,12 +16,15 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.Mockito.mockStatic;
 
 @ExtendWith(MockitoExtension.class)
 class StrictlyOnceMapServiceTest {
@@ -32,27 +36,19 @@ class StrictlyOnceMapServiceTest {
     StrictlyOnceMap eventMap;
     StrictlyOnceMapService eventMapService;
     InMemoryEventStore invalidatedEventStore = new InMemoryEventStore();
+    KeyMaker keyMaker = new KeyMaker( KEY_PREFIX );
 
 
     @BeforeEach
     void before() {
-        this.eventMapService = new StrictlyOnceMapService( eventMap, EVENT_DURATION, KEY_PREFIX );
+        this.eventMapService = new StrictlyOnceMapService( eventMap, EVENT_DURATION, keyMaker );
         this.eventMapService.setInvalidator( invalidatedEventStore );
-    }
-
-    @Test
-    void constructorBuildsExpectedClockKey() {
-        String expected = eventMapService.keyPrefix() + eventMapService.DELIMITER + eventMapService.CLOCK_ELEMENT;
-        Assertions.assertEquals( expected, eventMapService.clockKey() );
     }
 
     @Test
     void putEventCallsEventMapWithExpectedEventKey() {
         EventTime event = new EventTime( "test 1", 0L );
-        String expectedEventKey =
-                eventMapService.keyPrefix() + eventMapService.DELIMITER + eventMapService.EVENT_ELEMENT +
-                        eventMapService.DELIMITER + event.event();
-
+        String expectedEventKey = keyMaker.generateEventKey( "test 1" );
         Mockito.doReturn( new TimeIsValidDiff( new TimeIsValid( 1L, true ), new TimeIsValid( 1L, false ), 2L ) )
                 .when( eventMap )
                 .putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyString(), Mockito.anyLong() );
@@ -146,9 +142,28 @@ class StrictlyOnceMapServiceTest {
     @MethodSource("isValidReturnTestSource")
     void isValidReturnsExpected(EventHash state, long timeQuery, boolean expected, String _label) {
         Mockito.doReturn( state ).when( eventMap ).getEventHash( Mockito.anyString() );
-        boolean found = eventMapService.isValid( new EventTime( "test 1", timeQuery ) );
-        Assertions.assertEquals( expected, found, "expected return value" );
+        // we mock time b/c EventMapService validates time of EventTime provided and throws if time is in future or far
+        // in past
+        Instant fakeInstant = Instant.ofEpochMilli( 2 * EVENT_DURATION );
+        try (MockedStatic<Instant> instantMock = mockStatic( Instant.class, Mockito.CALLS_REAL_METHODS )) {
+            instantMock.when( Instant::now ).thenReturn( fakeInstant );
+
+            boolean found = eventMapService.isValid( new EventTime( "test 1", timeQuery ) );
+            Assertions.assertEquals( expected, found, "expected return value" );
+        }
     }
 
+    @Test
+    void isValidThrowsWhenTimeIsInTheFuture() {
+        long futureTime = Instant.now().toEpochMilli()+1_000;
+        EventTime futureEvent = new EventTime("Test 1", futureTime);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> eventMapService.isValid(futureEvent));
+    }
 
+    @Test
+    void isValidThrowsWhenTimeGTDoubleEventDurationInPast() {
+        long pastTime = Instant.now().toEpochMilli() - 2*EVENT_DURATION - 1;
+        EventTime futureEvent = new EventTime("Test 1", pastTime);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> eventMapService.isValid(futureEvent));
+    }
 }

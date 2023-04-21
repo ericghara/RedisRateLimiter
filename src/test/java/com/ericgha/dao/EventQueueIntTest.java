@@ -2,6 +2,7 @@ package com.ericgha.dao;
 
 import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.config.RedisConfig;
+import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
 import com.ericgha.test_fixtures.EnableRedisTestContainer;
@@ -17,33 +18,29 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 @EnableRedisTestContainer
 @SpringBootTest(classes = {RedisConfig.class})
 public class EventQueueIntTest {
 
+    KeyMaker keyMaker = new KeyMaker( "EventQueueIntTest" );
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    @Qualifier("eventTimeRedisTemplate")
-    FunctionRedisTemplate<String, EventTime> eventTimeRedisTemplate;
+    @Qualifier("eventTimeTemplate")
+    FunctionRedisTemplate<String, EventTime> eventTimeTemplate;
+
     EventQueue eventQueue;
 
     @BeforeEach
     void before() {
-        eventQueue = new EventQueue( eventTimeRedisTemplate );
+        eventQueue = new EventQueue( eventTimeTemplate, keyMaker );
     }
 
     @AfterEach
     public void afterEach() {
         RedisConnection connection = connectionFactory.getConnection();
         connection.commands().flushAll();
-    }
-
-    @Test
-    public void queueIdReturnsUUIDWithAutowiredConstructor() {
-        Assertions.assertDoesNotThrow( () -> UUID.fromString( eventQueue.queueId() ) );
     }
 
     @Test

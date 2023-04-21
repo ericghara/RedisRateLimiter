@@ -6,6 +6,7 @@ import com.ericgha.dto.Versioned;
 import com.ericgha.exception.DirtyStateException;
 import com.ericgha.service.event_consumer.EventConsumer;
 import jakarta.annotation.Nullable;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.retry.TerminatedRetryException;
@@ -33,6 +34,7 @@ import java.util.function.BiConsumer;
  * multiple expirations polling occurs as quickly as events may be processed.
  */
 
+// todo 'cleanly' restart dead workers
 public class EventExpiryService {
 
     private final EventQueueService queueService;
@@ -52,7 +54,7 @@ public class EventExpiryService {
      * @param delayMilli    the amount of time events should be <em>aged</em> on the queue.
      * @throws IllegalStateException if {@code EventExpiryService} was already running
      */
-    public synchronized void start(EventConsumer eventConsumer, int delayMilli,
+    public synchronized void start(EventConsumer eventConsumer, long delayMilli,
                                    int numWorkers) throws IllegalStateException {
         if (Objects.isNull( eventConsumer )) {
             throw new NullPointerException( "Received a null EventConsumer." );
@@ -67,6 +69,7 @@ public class EventExpiryService {
     /**
      * @return previous run state
      */
+    @PreDestroy
     public synchronized boolean stop() {
         if (isRunning()) {
             workerContext.stop();
@@ -131,11 +134,9 @@ public class EventExpiryService {
             PollWorker worker = new PollWorker( workerId );
             BiConsumer<Void, Throwable> errorHandler = (_v, e) -> {
                 if (Objects.nonNull( e )) {
-                    log.error( "Exception for worker {}}:", workerId, e );
-                    if (!shutdownRequested) {
-                        submitWorker( workerId );
-                    }
+                    log.error( "Exception for worker {}:", workerId, e );
                 }
+                log.info("EventExpiryService:{}:worker-{}: Went down.", queueService.queueKey(), workerId);
             };
             CompletableFuture.runAsync( worker, pool ).whenComplete( errorHandler );
         }

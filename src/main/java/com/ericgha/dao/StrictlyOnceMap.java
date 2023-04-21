@@ -38,18 +38,15 @@ import java.util.concurrent.TimeUnit;
  */
 public class StrictlyOnceMap {
 
-    private static final String DELIMITER = ":"; // delimiter between prefix and key
-
-    private final FunctionRedisTemplate<String, Long> stringLongRedisTemplate;
-
+    private final FunctionRedisTemplate<String, Long> stringLongTemplate;
 
     private final String isValidIdentifier = "is_valid";
     private final String timeIdentifier = "time";
     private final String retiredIdentifier = "retired";
     private final Logger log;
 
-    public StrictlyOnceMap(@NonNull FunctionRedisTemplate<String, Long> stringLongRedisTemplate) {
-        this.stringLongRedisTemplate = stringLongRedisTemplate;
+    public StrictlyOnceMap(@NonNull FunctionRedisTemplate<String, Long> stringLongTemplate) {
+        this.stringLongTemplate = stringLongTemplate;
         this.log = LoggerFactory.getLogger( this.getClass().getName() );
     }
 
@@ -91,10 +88,10 @@ public class StrictlyOnceMap {
 
     // for testing, expiry optional.  No expiration set if null.
     void setEvent(String eventKey, long time, boolean isValid, @Nullable Long expiryMilli) {
-        stringLongRedisTemplate.opsForHash()
+        stringLongTemplate.opsForHash()
                 .putAll( eventKey, Map.of( timeIdentifier, time, isValidIdentifier, isValid ? 1L : 0L ) );
         if (Objects.nonNull( expiryMilli )) {
-            stringLongRedisTemplate.expire( eventKey, expiryMilli, TimeUnit.MILLISECONDS );
+            stringLongTemplate.expire( eventKey, expiryMilli, TimeUnit.MILLISECONDS );
         }
     }
 
@@ -102,7 +99,7 @@ public class StrictlyOnceMap {
     public TimeIsValidDiff putEvent(@NonNull String eventKey, long time, @NonNull String clockKey,
                                     long eventDurationMillis) throws IllegalStateException {
         List<?> rawResult;
-        try (Jedis connection = stringLongRedisTemplate.getJedisConnection()) {
+        try (Jedis connection = stringLongTemplate.getJedisConnection()) {
             rawResult = (List<?>) connection.fcall( "put_event", List.of( eventKey, clockKey ),
                                                     List.of( Long.toString( time ),
                                                              Long.toString( eventDurationMillis ) ) );
@@ -124,7 +121,7 @@ public class StrictlyOnceMap {
     }
 
     public EventHash getEventHash(@NonNull String eventKey) throws IllegalStateException {
-        List<Long> values = stringLongRedisTemplate.opsForHash()
+        List<Long> values = stringLongTemplate.opsForHash()
                 .multiGet( eventKey, List.of( timeIdentifier, isValidIdentifier, retiredIdentifier ) ).stream()
                 .map( l -> (Long) l ).toList();
         return toEventHash( values );
@@ -132,7 +129,7 @@ public class StrictlyOnceMap {
 
     // for testing
     Long getClock(String clockKey) {
-        return stringLongRedisTemplate.opsForValue().get( clockKey );
+        return stringLongTemplate.opsForValue().get( clockKey );
     }
 
 

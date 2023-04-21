@@ -52,42 +52,42 @@ public class OnlyOnceEventServiceTest {
     }
 
     @Test
-    @DisplayName("putEvent returns 503 when eventMapService#tryAddEvent throws dirty state exception")
+    @DisplayName("putEvent returns 503 when eventMapService#putEvent throws dirty state exception")
     void putEventReturns502WhenRetriesExhausted() {
         EventTime eventTime = new EventTime( "testEvent", Instant.now().toEpochMilli() );
         Mockito.doReturn( 0L ).when( eventQueueService ).size();
         Mockito.doThrow( new DirtyStateException() ).when( eventMapService )
-                .tryAddEvent( Mockito.any( EventTime.class ) );
+                .putEvent( Mockito.any( EventTime.class ) );
         HttpStatus foundStatus = onlyOnceEventService.putEvent( eventTime );
         Assertions.assertEquals( HttpStatus.valueOf( 503 ), foundStatus );
     }
 
     @Test
-    @DisplayName("putEvent returns 201 when eventMapService#tryAddEvent returns true")
+    @DisplayName("putEvent returns 201 when eventMapService#putEvent returns true")
     void putEventReturns201WhenEventSuccessfullyPut() {
         EventTime eventTime = new EventTime( "testEvent", Instant.now().toEpochMilli() );
         Mockito.doReturn( 0L ).when( eventQueueService ).size();
-        Mockito.doReturn( true ).when( eventMapService ).tryAddEvent( Mockito.any( EventTime.class ) );
+        Mockito.doReturn( true ).when( eventMapService ).putEvent( Mockito.any( EventTime.class ) );
         HttpStatus foundStatus = onlyOnceEventService.putEvent( eventTime );
         Assertions.assertEquals( HttpStatus.valueOf( 201 ), foundStatus );
     }
 
     @Test
-    @DisplayName("putEvent offers event to eventQueue when eventMapService#tryAddEvent returns true")
+    @DisplayName("putEvent offers event to eventQueue when eventMapService#putEvent returns true")
     void putEventOffersToEventQueueWhenNoConflict() {
         EventTime eventTime = new EventTime( "testEvent", Instant.now().toEpochMilli() );
         Mockito.doReturn( 0L ).when( eventQueueService ).size();
-        Mockito.doReturn( true ).when( eventMapService ).tryAddEvent( Mockito.any( EventTime.class ) );
+        Mockito.doReturn( true ).when( eventMapService ).putEvent( Mockito.any( EventTime.class ) );
         onlyOnceEventService.putEvent( eventTime );
         Mockito.verify( eventQueueService ).offer( eventTime );
     }
 
     @Test
-    @DisplayName("putEvent returns 409 when eventMapService#tryAddEvent returns false")
+    @DisplayName("putEvent returns 409 when eventMapService#putEvent returns false")
     void putEventReturns409WhenEventNotPut() {
         EventTime eventTime = new EventTime( "testEvent", Instant.now().toEpochMilli() );
         Mockito.doReturn( 0L ).when( eventQueueService ).size();
-        Mockito.doReturn( false ).when( eventMapService ).tryAddEvent( Mockito.any( EventTime.class ) );
+        Mockito.doReturn( false ).when( eventMapService ).putEvent( Mockito.any( EventTime.class ) );
         HttpStatus foundStatus = onlyOnceEventService.putEvent( eventTime );
         Assertions.assertEquals( HttpStatus.valueOf( 409 ), foundStatus );
     }

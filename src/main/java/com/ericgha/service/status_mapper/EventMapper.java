@@ -1,4 +1,4 @@
-package com.ericgha.service.event_transformer;
+package com.ericgha.service.status_mapper;
 
 import com.ericgha.dto.EventTime;
 

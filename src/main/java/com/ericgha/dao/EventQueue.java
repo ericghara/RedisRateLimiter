@@ -1,5 +1,6 @@
 package com.ericgha.dao;
 
+import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
 import com.ericgha.exception.DirtyStateException;
@@ -14,23 +15,18 @@ import org.springframework.data.redis.core.SessionCallback;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 
 public class EventQueue {
 
-    private final RedisTemplate<String, EventTime> eventTimeRedisTemplate;
+    private final RedisTemplate<String, EventTime> eventTimeTemplate;
     private final String queueId;
     private final String clockKey;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
 
-    public EventQueue(RedisTemplate<String, EventTime> eventTimeRedisTemplate) {
-        this( eventTimeRedisTemplate, UUID.randomUUID().toString() );
-    }
-
-    public EventQueue(RedisTemplate<String, EventTime> eventTimeRedisTemplate, String queueId) {
-        this.eventTimeRedisTemplate = eventTimeRedisTemplate;
-        this.queueId = queueId;
-        this.clockKey = String.format( "RESERVED_%s_CLOCK", queueId );
+    public EventQueue(RedisTemplate<String, EventTime> eventTimeTemplate, KeyMaker keyMaker) {
+        this.eventTimeTemplate = eventTimeTemplate;
+        this.queueId = keyMaker.generateQueueKey();
+        this.clockKey = keyMaker.generateClockKey();
     }
 
     /**
@@ -43,7 +39,7 @@ public class EventQueue {
     @SuppressWarnings("rawtypes")
     public Versioned<EventTime> tryPoll(long thresholdTime) throws DirtyStateException {
         TimeConditionalPoll conditionalPoll = new TimeConditionalPoll( thresholdTime );
-        List polled = eventTimeRedisTemplate.execute( conditionalPoll );
+        List polled = eventTimeTemplate.execute( conditionalPoll );
         return switch (polled.size()) {
             case 0 ->
                     throw new DirtyStateException( String.format( "Queue: %s was modified while polling.", queueId ) );
@@ -69,7 +65,7 @@ public class EventQueue {
      */
     public long offer(EventTime event) throws DirtyStateException {
         VersionedOffer versionedOffer = new VersionedOffer( event );
-        List<Long> clockAndSize = eventTimeRedisTemplate.execute( versionedOffer );
+        List<Long> clockAndSize = eventTimeTemplate.execute( versionedOffer );
         return switch (clockAndSize.size()) {
             case 0 -> throw new DirtyStateException( "Clock was modified while offering." );
             case 2 -> clockAndSize.get( 0 );
@@ -84,7 +80,7 @@ public class EventQueue {
     @SuppressWarnings("unchecked, rawtypes")
     public Versioned<List<EventTime>> getRange(long start, long end) throws DirtyStateException {
         VersionedRange versionedRange = new VersionedRange( start, end );
-        List versionAndRange = eventTimeRedisTemplate.execute( versionedRange );
+        List versionAndRange = eventTimeTemplate.execute( versionedRange );
         return switch (versionAndRange.size()) {
             case 0 -> throw new DirtyStateException( "Clock was modified during range query." );
             default -> new Versioned<>( (long) versionAndRange.get( 0 ),
@@ -94,7 +90,7 @@ public class EventQueue {
 
     public long size() {
         // should not return null b/c not used in pipeline or transaction (see documentation)
-        return eventTimeRedisTemplate.opsForList().size( queueId );
+        return eventTimeTemplate.opsForList().size( queueId );
     }
 
     public String clockKey() {
@@ -109,13 +105,13 @@ public class EventQueue {
     @Nullable
         // convenience method for testing
     EventTime peek() {
-        return eventTimeRedisTemplate.opsForList().index( queueId, 0 );
+        return eventTimeTemplate.opsForList().index( queueId, 0 );
     }
 
     @Nullable
         // convenience method for testing
     EventTime poll() {
-        return eventTimeRedisTemplate.opsForList().leftPop( queueId );
+        return eventTimeTemplate.opsForList().leftPop( queueId );
     }
 
 
@@ -203,7 +199,7 @@ public class EventQueue {
             operations.watch( clockKey );
             operations.multi();
             operations.opsForValue().increment( clockKey );
-            eventTimeRedisTemplate.opsForList().range( queueId, start, end );
+            eventTimeTemplate.opsForList().range( queueId, start, end );
             return operations.exec();
         }
 

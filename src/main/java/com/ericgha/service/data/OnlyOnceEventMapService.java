@@ -1,6 +1,7 @@
 package com.ericgha.service.data;
 
 import com.ericgha.dao.OnlyOnceMap;
+import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventTime;
 import com.ericgha.exception.DirtyStateException;
 import org.springframework.retry.support.RetryTemplate;
@@ -11,36 +12,32 @@ import org.springframework.retry.support.RetryTemplate;
  * <em>Note: </em> Decided to take multiplex approach over using multiple DBs as this is a much lighter
  * and does not require multiple connection factories.
  */
-public class OnlyOnceEventMapService {
+public class OnlyOnceEventMapService implements EventMapService {
 
-    //  delimiter b/t prefix and key; i.e {PREFIX}.{KEY} for ELEMENT_SEPARATOR = '.'
-    private static final char ELEMENT_DELIMITER = '.';
     private final OnlyOnceMap eventMap;
-    private final String keyPrefix;
+    private final KeyMaker keyMaker;
     private final RetryTemplate retryTemplate;
+    private final long eventDuration;
 
-    public OnlyOnceEventMapService(OnlyOnceMap eventMap, String keyPrefix, RetryTemplate retryTemplate) {
+    public OnlyOnceEventMapService(OnlyOnceMap eventMap, KeyMaker keyMaker, RetryTemplate retryTemplate) {
         // Qualifier only used for testing
+        this.eventDuration = eventMap.eventDuration(); // todo event duration should be controlled by service
         this.eventMap = eventMap;
-        this.keyPrefix = keyPrefix;
+        this.keyMaker = keyMaker;
         this.retryTemplate = retryTemplate;
     }
 
-    private String generateKey(String event) {
-        return keyPrefix + ELEMENT_DELIMITER + event;
-    }
-
-    public boolean tryAddEvent(String event, long timeMilli) throws DirtyStateException {
-        String key = generateKey( event );
+    public boolean putEvent(String event, long timeMilli) throws DirtyStateException {
+        String key = keyMaker.generateEventKey( event );
         return retryTemplate.execute( _context -> eventMap.putEvent( key, timeMilli ) );
     }
 
-    public boolean tryAddEvent(EventTime eventTime) throws DirtyStateException {
-        return tryAddEvent( eventTime.event(), eventTime.time() );
+    public boolean putEvent(EventTime eventTime) throws DirtyStateException {
+        return putEvent( eventTime.event(), eventTime.time() );
     }
 
     public boolean tryDeleteEvent(String event, long timeMilli) throws DirtyStateException {
-        String key = generateKey( event );
+        String key = keyMaker.generateEventKey( event );
         return retryTemplate.execute( _context -> eventMap.deleteEvent( key, timeMilli ) );
     }
 
@@ -49,10 +46,6 @@ public class OnlyOnceEventMapService {
     }
 
     public String keyPrefix() {
-        return this.keyPrefix;
-    }
-
-    public char delimiter() {
-        return ELEMENT_DELIMITER;
+        return keyMaker.keyPrefix();
     }
 }

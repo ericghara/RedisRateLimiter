@@ -19,12 +19,10 @@ import org.springframework.data.redis.serializer.GenericToStringSerializer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-import java.io.IOException;
-
 @Configuration
 public class RedisConfig {
 
-    @Value("classpath:redis/redis_functions.lua")
+    @Value("classpath:${app.redis.functions-resource}")
     Resource redisFunctions;
 
     @Bean
@@ -57,11 +55,11 @@ public class RedisConfig {
     }
 
     @Bean
-    @Qualifier("stringRedisTemplate")
+    @Qualifier("stringTemplate")
     @ConditionalOnProperty(name = "app.redis.disable-bean.string-redis-template", havingValue = "false",
             matchIfMissing = true)
-    FunctionRedisTemplate<String, String> stringRedisTemplate(RedisConnectionFactory redisConnectionFactory,
-                                                              StringRedisSerializer stringRedisSerializer) {
+    FunctionRedisTemplate<String, String> stringTemplate(RedisConnectionFactory redisConnectionFactory,
+                                                         StringRedisSerializer stringRedisSerializer) {
         FunctionRedisTemplate<String, String> template = new FunctionRedisTemplate<>( redisFunctions );
         // set serializers
         template.setKeySerializer( stringRedisSerializer );
@@ -76,12 +74,12 @@ public class RedisConfig {
     }
 
     @Bean
-    @Qualifier("eventTimeRedisTemplate")
+    @Qualifier("eventTimeTemplate")
     @ConditionalOnProperty(name = "app.redis.disable-bean.event-time-redis-template", havingValue = "false",
             matchIfMissing = true)
-    FunctionRedisTemplate<String, EventTime> eventTimeRedisTemplate(RedisConnectionFactory redisConnectionFactory,
-                                                                    StringRedisSerializer stringRedisSerializer,
-                                                                    Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {
+    FunctionRedisTemplate<String, EventTime> eventTimeTemplate(RedisConnectionFactory redisConnectionFactory,
+                                                               StringRedisSerializer stringRedisSerializer,
+                                                               Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {
         FunctionRedisTemplate<String, EventTime> template = new FunctionRedisTemplate<>( redisFunctions );
         template.setConnectionFactory( redisConnectionFactory );
         // keys use string serializer
@@ -96,10 +94,10 @@ public class RedisConfig {
     }
 
     @Bean
-    @Qualifier("stringLongRedisTemplate")
+    @Qualifier("stringLongTemplate")
     @ConditionalOnProperty(name = "app.redis.disable-bean.string-long-redis-template", havingValue = "false",
             matchIfMissing = true)
-    FunctionRedisTemplate<String, Long> stringLongRedisTemplate(RedisConnectionFactory redisConnectionFactory,
+    FunctionRedisTemplate<String, Long> stringLongTemplate(RedisConnectionFactory redisConnectionFactory,
                                                                 StringRedisSerializer stringRedisSerializer) {
         FunctionRedisTemplate<String, Long> template = new FunctionRedisTemplate<>( redisFunctions );
         GenericToStringSerializer<Long> longSerializer = new GenericToStringSerializer<>( Long.class );

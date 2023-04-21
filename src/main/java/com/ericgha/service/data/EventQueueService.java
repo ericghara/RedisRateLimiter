@@ -66,4 +66,8 @@ public class EventQueueService {
         return eventQueue.clockKey();
     }
 
+    public String queueKey() {
+        return eventQueue.queueId();
+    }
+
 }

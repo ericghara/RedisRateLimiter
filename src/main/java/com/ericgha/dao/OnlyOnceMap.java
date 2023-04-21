@@ -29,11 +29,16 @@ public class OnlyOnceMap {
     }
 
     // todo refactor this should be set at service level
+    // todo should use <String,Long> redisTemplate
     public void setEventDuration(long millis) throws IllegalArgumentException {
         if (millis < 0) {
             throw new IllegalArgumentException( "Event duration must be a positive long" );
         }
         this.eventDurationMillis = millis;
+    }
+
+    public long eventDuration() {
+        return this.eventDurationMillis;
     }
 
     // Convenience method for testing.  Returns previous key value or null
@@ -42,8 +47,9 @@ public class OnlyOnceMap {
     }
 
     /**
-     * Attempts to put event (@code{eventKey}) into map.  Put succeeds if no identical eventKey is in the map, or an identical eventKey is in
-     * the map with at a time of at least {@code eventDurationMillis} before this eventKey's {@code timeMilli}
+     * Attempts to put event (@code{eventKey}) into map.  Put succeeds if no identical eventKey is in the map, or an
+     * identical eventKey is in the map with at a time of at least {@code eventDurationMillis} before this eventKey's
+     * {@code timeMilli}
      *
      * <pre>IF newEvent is absent OR (oldTime + eventDuration) <= newTime then PUT in map</pre>
      *
@@ -64,14 +70,16 @@ public class OnlyOnceMap {
     }
 
     /**
-     * Deletes an event ({@code eventKey}) from the map if it is equal to or older than {@code timeMilli}. {@code timeMilli}
+     * Deletes an event ({@code eventKey}) from the map if it is equal to or older than {@code timeMilli}.
+     * {@code timeMilli}
      * <em>must</em> be at least {@code eventDurationMillis} in the previous.
      *
      * @param eventKey
      * @param timeMilli time of eventKey
      * @return {@code true} if delete performed {@code false} if no delete performed
      * @throws DirtyStateException      if a concurrent modification caused the transaction to abort
-     * @throws IllegalArgumentException if {@code timeMilli} is not at least {@code eventDurationMillis} in the previous
+     * @throws IllegalArgumentException if {@code timeMilli} is not at least {@code eventDurationMillis} in the
+     *                                  previous
      */
     public boolean deleteEvent(String eventKey, long timeMilli) throws DirtyStateException, IllegalArgumentException {
         if (Instant.now().toEpochMilli() < timeMilli + eventDurationMillis) {
@@ -87,8 +95,12 @@ public class OnlyOnceMap {
         return !found.get( 0 ).isEmpty();
     }
 
-    public String get(String eventKey) {
-        return valueOps.get( eventKey );
+    public Long get(String eventKey) {
+        String longStr = valueOps.get( eventKey );
+        if (Objects.isNull( longStr )) {
+            return null;
+        }
+        return Long.parseLong( longStr );
     }
 
     static class TimeConditionalDelete implements SessionCallback<List<String>> {
@@ -193,6 +205,4 @@ public class OnlyOnceMap {
             return List.of( false );
         }
     }
-
-
 }

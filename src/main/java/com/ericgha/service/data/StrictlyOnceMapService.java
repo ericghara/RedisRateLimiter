@@ -1,6 +1,7 @@
 package com.ericgha.service.data;
 
 import com.ericgha.dao.StrictlyOnceMap;
+import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventHash;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.TimeIsValidDiff;
@@ -9,14 +10,12 @@ import com.ericgha.service.event_consumer.EventConsumer;
 import com.ericgha.service.event_consumer.NoOpEventConsumer;
 import org.springframework.lang.NonNull;
 
+import java.time.Instant;
 import java.util.Objects;
 
-public class StrictlyOnceMapService {
+public class StrictlyOnceMapService implements EventMapService {
 
-    public final String EVENT_ELEMENT = "EVENT";
-    public final String CLOCK_ELEMENT = "CLOCK";
-    public final String DELIMITER = ":";
-    private final String keyPrefix;
+    private final KeyMaker keyMaker;
 
     private final String clockKey;
 
@@ -25,28 +24,36 @@ public class StrictlyOnceMapService {
     private long eventDurationMillis;
     private EventConsumer invalidator;
     public StrictlyOnceMapService(@NonNull StrictlyOnceMap eventMap, long eventDurationMillis,
-                                  @NonNull String keyPrefix) {
+                                  @NonNull KeyMaker keyMaker) {
         this.eventMap = eventMap;
         setEventDuration( eventDurationMillis );
-        this.keyPrefix = keyPrefix;
-        this.clockKey = encodeKey( CLOCK_ELEMENT );
+        this.keyMaker = keyMaker;
+        this.clockKey = keyMaker.generateClockKey();
         this.invalidator = new NoOpEventConsumer();
     }
 
     public boolean putEvent(EventTime eventTime) {
-        String eventKey = encodeEvent( eventTime.event() );
+        String eventKey = keyMaker.generateEventKey( eventTime.event() );
         TimeIsValidDiff diff = eventMap.putEvent( eventKey, eventTime.time(), clockKey, eventDurationMillis );
         if (Objects.isNull( diff.currentVersion() )) {  // currentVersion null when no state change occurred
             return false;
         }
         handleIfInvalidated( diff, eventTime.event() );
         // second check handles far out-of-order events, i.e. eventTime so far in past it does not invalidate
-        // the most recent item in EventMap, but it's not accepted because it predates an item in the map
+        // the most recent item in EventMapService, but it's not accepted because it predates an item in the map
         return diff.current().isValid() && eventTime.time() == diff.current().time();  // cannot be null
     }
 
-    public boolean isValid(EventTime eventTime) {
-        String eventKey = encodeEvent( eventTime.event() );
+    /**
+     *
+     * @param eventTime
+     * @return
+     * @throws IllegalArgumentException if it is impossible to determine the validity because the queried event is
+     * in the future or the queried event is in the past by a period {@code > 2*eventDuration}.
+     */
+    public boolean isValid(EventTime eventTime) throws IllegalArgumentException {
+        isValidCheckArguments(eventTime);
+        String eventKey = keyMaker.generateEventKey( eventTime.event() );
         EventHash curState = eventMap.getEventHash( eventKey );
         long requestedTime = eventTime.time();
         if (Objects.nonNull( curState.time() ) && curState.time() == requestedTime && curState.isValid()) {
@@ -56,12 +63,24 @@ public class StrictlyOnceMapService {
 
     }
 
+    private void isValidCheckArguments(EventTime eventTime) throws IllegalArgumentException {
+        Objects.requireNonNull(eventTime);
+        long time = eventTime.time();
+        long currentTime = Instant.now().toEpochMilli();
+        if (time > currentTime) {
+            throw new IllegalArgumentException("Cannot query validity of an event in the future. EventTime: " + eventTime);
+        }
+        if (time + 2*eventDurationMillis < currentTime) {
+            throw new IllegalArgumentException("Cannot query a time more than 2*eventDuration in the past. EventTime: " + eventTime);
+        }
+    }
+
     public void setInvalidator(@NonNull EventConsumer invalidHandler) throws IllegalArgumentException {
         Objects.requireNonNull( invalidHandler, "Received a null invalidator" );
         this.invalidator = invalidHandler;
     }
 
-    public void setEventDuration(long millis) throws IllegalArgumentException {
+    private void setEventDuration(long millis) throws IllegalArgumentException {
         if (millis < 0) {
             throw new IllegalArgumentException( "Event duration must be a positive long" );
         }
@@ -69,7 +88,7 @@ public class StrictlyOnceMapService {
     }
 
     public String keyPrefix() {
-        return keyPrefix;
+        return keyMaker.keyPrefix();
     }
 
     public String clockKey() {
@@ -82,18 +101,6 @@ public class StrictlyOnceMapService {
      */
     public long eventDuration() {
         return eventDurationMillis;
-    }
-
-    private String encodeKey(String... elements) {
-        String[] prefixAndElements = new String[elements.length + 1];
-        prefixAndElements[0] = keyPrefix;
-        System.arraycopy( elements, 0, prefixAndElements, 1, elements.length );
-        return String.join( DELIMITER, prefixAndElements );
-    }
-    // open for testing
-
-    String encodeEvent(@NonNull String event) {
-        return encodeKey( EVENT_ELEMENT, event );
     }
 
     private boolean handleIfInvalidated(TimeIsValidDiff diff, String event) {
