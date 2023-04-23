@@ -6,7 +6,7 @@ import com.ericgha.dto.EventHash;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.TimeIsValid;
 import com.ericgha.dto.TimeIsValidDiff;
-import com.ericgha.service.event_consumer.InMemoryEventStore;
+import com.ericgha.service.event_consumer.TestingEventStore;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,7 +35,7 @@ class StrictlyOnceMapServiceTest {
     @Mock
     StrictlyOnceMap eventMap;
     StrictlyOnceMapService eventMapService;
-    InMemoryEventStore invalidatedEventStore = new InMemoryEventStore();
+    TestingEventStore invalidatedEventStore = new TestingEventStore();
     KeyMaker keyMaker = new KeyMaker( KEY_PREFIX );
 
 
@@ -108,7 +108,7 @@ class StrictlyOnceMapServiceTest {
                 .putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyString(), Mockito.anyLong() );
         eventMapService.putEvent( new EventTime( "Test", 0L ) );
         EventTime expectedInvalidated = new EventTime( "Test", 1L );
-        Long foundVersion = invalidatedEventStore.eventsByVersionClock().get( expectedInvalidated );
+        Long foundVersion = invalidatedEventStore.eventsToVersions().get( expectedInvalidated );
         Assertions.assertNotNull( foundVersion, "Expected event invalidate" );
         Assertions.assertEquals( 2L, foundVersion, "Expected version" );
     }
@@ -120,7 +120,7 @@ class StrictlyOnceMapServiceTest {
                 .when( eventMap )
                 .putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyString(), Mockito.anyLong() );
         eventMapService.putEvent( new EventTime( "Test", 0L ) );
-        Assertions.assertTrue( invalidatedEventStore.eventsByVersionClock().isEmpty(), "No Event Submitted" );
+        Assertions.assertTrue( invalidatedEventStore.eventsToVersions().isEmpty(), "No Event Submitted" );
     }
 
     static Stream<Arguments> isValidReturnTestSource() {
@@ -154,16 +154,16 @@ class StrictlyOnceMapServiceTest {
     }
 
     @Test
-    void isValidThrowsWhenTimeIsInTheFuture() {
+    void isValidReturnsFalseTimeIsInTheFuture() {
         long futureTime = Instant.now().toEpochMilli()+1_000;
         EventTime futureEvent = new EventTime("Test 1", futureTime);
-        Assertions.assertThrows(IllegalArgumentException.class, () -> eventMapService.isValid(futureEvent));
+        Assertions.assertFalse(eventMapService.isValid(futureEvent));
     }
 
     @Test
-    void isValidThrowsWhenTimeGTDoubleEventDurationInPast() {
+    void isValidReturnsFalseTimeGTDoubleEventDurationInPast() {
         long pastTime = Instant.now().toEpochMilli() - 2*EVENT_DURATION - 1;
         EventTime futureEvent = new EventTime("Test 1", pastTime);
-        Assertions.assertThrows(IllegalArgumentException.class, () -> eventMapService.isValid(futureEvent));
+        Assertions.assertFalse(eventMapService.isValid(futureEvent));
     }
 }

@@ -36,8 +36,9 @@ public class OnlyOnceMapIntTest {
 
     @AfterEach
     public void afterEach() {
-        RedisConnection connection = connectionFactory.getConnection();
-        connection.commands().flushAll();
+        try (RedisConnection connection = connectionFactory.getConnection() )  {
+            connection.commands().flushAll();
+        }
     }
 
     @Test

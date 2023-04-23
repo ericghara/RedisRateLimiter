@@ -6,8 +6,11 @@ import com.ericgha.dto.EventHash;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.TimeIsValidDiff;
 import com.ericgha.dto.Versioned;
+import com.ericgha.exception.QueryOutOfRangeException;
 import com.ericgha.service.event_consumer.EventConsumer;
 import com.ericgha.service.event_consumer.NoOpEventConsumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
 
 import java.time.Instant;
@@ -23,8 +26,10 @@ public class StrictlyOnceMapService implements EventMapService {
 
     private long eventDurationMillis;
     private EventConsumer invalidator;
+    private final Logger log;
     public StrictlyOnceMapService(@NonNull StrictlyOnceMap eventMap, long eventDurationMillis,
                                   @NonNull KeyMaker keyMaker) {
+        this.log = LoggerFactory.getLogger( this.getClass().getName() + ":" + keyMaker.keyPrefix() );
         this.eventMap = eventMap;
         setEventDuration( eventDurationMillis );
         this.keyMaker = keyMaker;
@@ -48,11 +53,15 @@ public class StrictlyOnceMapService implements EventMapService {
      *
      * @param eventTime
      * @return
-     * @throws IllegalArgumentException if it is impossible to determine the validity because the queried event is
-     * in the future or the queried event is in the past by a period {@code > 2*eventDuration}.
+     *
      */
-    public boolean isValid(EventTime eventTime) throws IllegalArgumentException {
-        isValidCheckArguments(eventTime);
+    public boolean isValid(EventTime eventTime) {
+        try {
+            isValidCheckArguments( eventTime );
+        } catch (QueryOutOfRangeException e) {
+            log.warn("Received an out of range query.");
+            return false;
+        }
         String eventKey = keyMaker.generateEventKey( eventTime.event() );
         EventHash curState = eventMap.getEventHash( eventKey );
         long requestedTime = eventTime.time();
@@ -63,15 +72,15 @@ public class StrictlyOnceMapService implements EventMapService {
 
     }
 
-    private void isValidCheckArguments(EventTime eventTime) throws IllegalArgumentException {
+    private void isValidCheckArguments(EventTime eventTime) throws NullPointerException, QueryOutOfRangeException {
         Objects.requireNonNull(eventTime);
         long time = eventTime.time();
         long currentTime = Instant.now().toEpochMilli();
         if (time > currentTime) {
-            throw new IllegalArgumentException("Cannot query validity of an event in the future. EventTime: " + eventTime);
+            throw new QueryOutOfRangeException("Cannot query validity of an event in the future. EventTime: " + eventTime);
         }
         if (time + 2*eventDurationMillis < currentTime) {
-            throw new IllegalArgumentException("Cannot query a time more than 2*eventDuration in the past. EventTime: " + eventTime);
+            throw new QueryOutOfRangeException("Cannot query a time more than 2*eventDuration in the past. EventTime: " + eventTime);
         }
     }
 

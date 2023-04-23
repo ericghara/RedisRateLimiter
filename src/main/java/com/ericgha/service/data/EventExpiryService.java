@@ -3,13 +3,12 @@ package com.ericgha.service.data;
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
-import com.ericgha.exception.DirtyStateException;
 import com.ericgha.service.event_consumer.EventConsumer;
 import jakarta.annotation.Nullable;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.retry.TerminatedRetryException;
+import org.springframework.dao.DataAccessException;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -73,6 +72,7 @@ public class EventExpiryService {
     public synchronized boolean stop() {
         if (isRunning()) {
             workerContext.stop();
+            this.workerContext = null;
             return true;
         }
         return false;
@@ -136,7 +136,7 @@ public class EventExpiryService {
                 if (Objects.nonNull( e )) {
                     log.error( "Exception for worker {}:", workerId, e );
                 }
-                log.info("EventExpiryService:{}:worker-{}: Went down.", queueService.queueKey(), workerId);
+                log.info( "EventExpiryService:{}:worker-{}: Went down.", queueService.queueKey(), workerId );
             };
             CompletableFuture.runAsync( worker, pool ).whenComplete( errorHandler );
         }
@@ -181,25 +181,28 @@ public class EventExpiryService {
                     activityLock.unlock();
                 }
                 if (Objects.nonNull( curEvent )) { // potentially null on shutdown
-                    doOnExpire.accept( curEvent );
+                    handleExpire( curEvent );
                 }
                 this.beginExhaustivePoll(); // detects shutdown itself
             }
 
+            private void handleExpire(Versioned<EventTime> event) {
+                try {
+                    doOnExpire.accept( event );
+                } catch (Exception e) {
+                    log.warn( "Encountered an error while expiring event {}.  Status will be lost.", event );
+                    log.debug( "Exception on expiring event (version: {}): {}.", event.clock(), e );
+                }
+            }
+
             @Nullable
-            // returns null if thresholdTime not meet OR if DirtyStateException or retries exhausted
             private Versioned<EventTime> pollQueue() {
                 Versioned<EventTime> polledEvent = null;
+                long now = Instant.now().toEpochMilli();
                 try {
-                    long now = Instant.now().toEpochMilli();
                     polledEvent = queueService.tryPoll( now - delayMilli );
-                } catch (RuntimeException e) {
-                    switch (e) {
-                        case DirtyStateException de ->
-                                log.debug( "Caught a DirtyStateException while polling EventQueue." );
-                        case TerminatedRetryException te -> log.debug( "Exhausted retries while polling EventQueue." );
-                        default -> throw e;
-                    }
+                } catch (DataAccessException e) {
+                    return null;  // scale in on failure
                 }
                 return Objects.nonNull( polledEvent ) ? polledEvent : null;
             }
@@ -208,7 +211,7 @@ public class EventExpiryService {
                 while (!shutdownRequested) {
                     Versioned<EventTime> curEvent = this.pollQueue();
                     if (Objects.nonNull( curEvent )) {
-                        doOnExpire.accept( curEvent );
+                        handleExpire( curEvent );
                     } else {
                         break;  // Queue empty or should wait for events to expire
                     }

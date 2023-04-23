@@ -49,8 +49,9 @@ public class StrictlyOnceMapIntTest {
 
     @AfterEach
     public void afterEach() {
-        RedisConnection connection = connectionFactory.getConnection();
-        connection.commands().flushAll();
+        try (RedisConnection connection = connectionFactory.getConnection() )  {
+            connection.commands().flushAll();
+        }
     }
 
     static Stream<Arguments> returnValueTestSource() {

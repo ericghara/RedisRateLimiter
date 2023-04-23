@@ -1,96 +1,110 @@
 package com.ericgha.dao;
 
+import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
-import com.ericgha.exception.DirtyStateException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.core.RedisOperations;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.lang.NonNull;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+import redis.clients.jedis.Jedis;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
 public class EventQueue {
 
-    private final RedisTemplate<String, EventTime> eventTimeTemplate;
-    private final String queueId;
+    private final FunctionRedisTemplate<String, String> stringTemplate;
+    private final String queueKey;
     private final String clockKey;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
+    private final ObjectMappingTools objectMappingTools;
 
-    public EventQueue(RedisTemplate<String, EventTime> eventTimeTemplate, KeyMaker keyMaker) {
-        this.eventTimeTemplate = eventTimeTemplate;
-        this.queueId = keyMaker.generateQueueKey();
+    // todo review comments after significant implementation changes
+
+    public EventQueue(FunctionRedisTemplate<String, String> stringTemplate, ObjectMapper objectMapper,
+                      KeyMaker keyMaker) {
+        this.stringTemplate = stringTemplate;
+        this.queueKey = keyMaker.generateQueueKey();
         this.clockKey = keyMaker.generateClockKey();
+        this.objectMappingTools = new ObjectMappingTools( objectMapper );
     }
 
     /**
      * @param thresholdTime latest time that should trigger a poll younger items will not be polled, items equal or
      *                      older to threshold will be polled.
      * @return null if nothing polled, else the (versioned) item polled
-     * @throws DirtyStateException
+     * @throws IllegalStateException if an error occurred deserializing the DB response.
      */
     @Nullable
-    @SuppressWarnings("rawtypes")
-    public Versioned<EventTime> tryPoll(long thresholdTime) throws DirtyStateException {
-        TimeConditionalPoll conditionalPoll = new TimeConditionalPoll( thresholdTime );
-        List polled = eventTimeTemplate.execute( conditionalPoll );
-        return switch (polled.size()) {
-            case 0 ->
-                    throw new DirtyStateException( String.format( "Queue: %s was modified while polling.", queueId ) );
-            case 1 -> {
-                if (Objects.isNull( polled.get( 0 ) )) {
-                    yield null;
-                }
-                log.warn( "Expected a single null element, found {}", polled );
-                throw new IllegalStateException(
-                        "Unexpected state.  A single element list should always contain a null element." );
-            }
-            case 2 -> new Versioned<EventTime>( (long) polled.get( 0 ), (EventTime) polled.get( 1 ) );
-            default -> {
-                log.warn( "Expected a 0-2 element list: {}", polled );
-                throw new IllegalStateException( "Expected 0-2 elements, found more" );
-            }
-        };
+    @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
+            backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
+                    multiplierExpression = "${app.redis.retry.multiplier}"))
+    public Versioned<EventTime> tryPoll(long thresholdTime) throws IllegalStateException {
+        List<?> rawPoll;
+        try (Jedis connection = stringTemplate.getJedisConnection()) {
+            rawPoll = (List<?>) connection.fcall( "POLL_QUEUE", List.of( queueKey, clockKey ),
+                                                  List.of( Long.toString( thresholdTime ) ) );
+        } catch (ClassCastException e) {
+            throw new IllegalStateException( "Could not deserialize the DB response.", e );
+        }
+        if (Objects.isNull( rawPoll )) {
+            return null;
+        }
+        if (rawPoll.size() != 2) {
+            throw new IllegalStateException( ( "Could not deserialize the DB response" ) );
+        }
+        return objectMappingTools.toVersionedEventTime( rawPoll );
     }
 
     /**
      * @param event
      * @return version based on an incrementing long
+     * @throws IllegalArgumentException if any serialization errors occur
+     * @throws IllegalStateException    if a non-numeric reply is returned from the DB
      */
-    public long offer(EventTime event) throws DirtyStateException {
-        VersionedOffer versionedOffer = new VersionedOffer( event );
-        List<Long> clockAndSize = eventTimeTemplate.execute( versionedOffer );
-        return switch (clockAndSize.size()) {
-            case 0 -> throw new DirtyStateException( "Clock was modified while offering." );
-            case 2 -> clockAndSize.get( 0 );
-            default -> {
-                log.warn( "Expected a 0 or 2 element list, found {}", clockAndSize );
-                throw new IllegalStateException(
-                        String.format( "Expected a 0 or 2 element list. Found %d elements", clockAndSize.size() ) );
-            }
-        };
+    @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
+            backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
+                    multiplierExpression = "${app.redis.retry.multiplier}"))
+    public long offer(EventTime event) throws IllegalArgumentException, IllegalStateException {
+        String eventJson = objectMappingTools.serializeEventTime( event );
+        try (Jedis conn = stringTemplate.getJedisConnection()) {
+            return (long) conn.fcall( "OFFER_QUEUE", List.of( queueKey, clockKey ), List.of( eventJson ) );
+        } catch (ClassCastException e) {
+            throw new IllegalStateException( "Could not convert the reply to a long." );
+        }
     }
 
-    @SuppressWarnings("unchecked, rawtypes")
-    public Versioned<List<EventTime>> getRange(long start, long end) throws DirtyStateException {
-        VersionedRange versionedRange = new VersionedRange( start, end );
-        List versionAndRange = eventTimeTemplate.execute( versionedRange );
-        return switch (versionAndRange.size()) {
-            case 0 -> throw new DirtyStateException( "Clock was modified during range query." );
-            default -> new Versioned<>( (long) versionAndRange.get( 0 ),
-                                        (List<EventTime>) versionAndRange.get( 1 ) );
-        };
+    /**
+     * @param start
+     * @param end
+     * @return
+     * @throws IllegalStateException if an error occurs deserializing the database response.
+     */
+    @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
+            backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
+                    multiplierExpression = "${app.redis.retry.multiplier}"))
+    public Versioned<List<EventTime>> getRange(long start, long end) throws IllegalStateException {
+        List<?> rawResponse;
+        try (Jedis conn = stringTemplate.getJedisConnection()) {
+            rawResponse = (List<?>) conn.fcall( "RANGE_QUEUE", List.of( queueKey, clockKey ), List.of( "0", "-1" ) );
+            return objectMappingTools.getRangeToObj( rawResponse );
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException( "Could not deserialize the DB response.", e );
+        }
     }
 
+    @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
+            backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
+                    multiplierExpression = "${app.redis.retry.multiplier}"))
     public long size() {
         // should not return null b/c not used in pipeline or transaction (see documentation)
-        return eventTimeTemplate.opsForList().size( queueId );
+        return stringTemplate.opsForList().size( queueKey );
     }
 
     public String clockKey() {
@@ -98,111 +112,99 @@ public class EventQueue {
     }
 
     public String queueId() {
-        return this.queueId;
+        return this.queueKey;
     }
 
 
     @Nullable
         // convenience method for testing
-    EventTime peek() {
-        return eventTimeTemplate.opsForList().index( queueId, 0 );
+    String peek() {
+        return stringTemplate.opsForList().index( queueKey, 0 );
     }
 
     @Nullable
         // convenience method for testing
     EventTime poll() {
-        return eventTimeTemplate.opsForList().leftPop( queueId );
+        String rawJson = stringTemplate.opsForList().leftPop( queueKey );
+        if (Objects.isNull( rawJson )) {
+            return null;
+        }
+        return objectMappingTools.toEventTime( rawJson );
+    }
+
+    @Nullable
+    Long getClock() {
+        String numStr = stringTemplate.opsForValue().get( clockKey );
+        if (Objects.isNull( numStr )) {
+            return null;
+        }
+        return Long.parseLong( numStr );
     }
 
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    public class TimeConditionalPoll implements SessionCallback<List> {
+    // Handling serialization/deserializaiton at class level is a debatable design decision.  Separate RedisTemplates
+    // for the one-off return type of tryPoll and one for EventTime felt too niche for so few operations
+    static class ObjectMappingTools {
 
-        private final long thresholdTime;
-        private final Logger log = LoggerFactory.getLogger( this.getClass() );
+        private final ObjectMapper objectMapper;
 
-        /**
-         * @param thresholdTime latest time that should trigger a poll younger items will not be polled.
-         */
-        public TimeConditionalPoll(long thresholdTime) {
-            this.thresholdTime = thresholdTime;
+        ObjectMappingTools(ObjectMapper objectMapper) {
+            this.objectMapper = objectMapper;
         }
 
-        /**
-         * @param operations Redis operations
-         * @return <ol>
-         * <li>a {@code List} containing a single {@code null} (!) element if the queue was empty or the head of queue does not meet time threshold</li>
-         * <li>a two element {@code List} [ (Long) {@code clock}, {@link EventTime} ] polled.</li>
-         * <li> an empty {@link List} if queue was modified causing polling to abort</li>
-         * </ol>
-         * @throws DataAccessException
-         */
-        @Override
-        public List execute(RedisOperations operations) throws DataAccessException {
-            operations.watch( List.of( queueId, clockKey ) );
-            EventTime first = (EventTime) operations.opsForList().index( queueId, 0 );
-            if (Objects.isNull( first ) || first.time() > thresholdTime) { // empty queue or need to wait before polling
-                operations.unwatch();
-                return Arrays.asList( new EventTime[]{null} );
+        private Versioned<EventTime> toVersionedEventTime(List<?> rawResult) throws IllegalArgumentException {
+            long version;
+            String jsonData;
+            try {
+                jsonData = (String) rawResult.get( 0 );
+                version = (long) rawResult.get( 1 );
+            } catch (ClassCastException e) {
+                throw new IllegalArgumentException( "Unable to deserialize version to a Long.", e );
             }
-            operations.multi();
-            operations.opsForValue().increment( clockKey );
-            operations.opsForList().leftPop( queueId );
-            return operations.exec();
-        }
-    }
-
-    public class VersionedOffer implements SessionCallback<List<Long>> {
-
-        private final EventTime eventTime;
-
-        VersionedOffer(EventTime eventTime) {
-            this.eventTime = eventTime;
+            EventTime eventTime = toEventTime( jsonData );
+            return new Versioned<>( version, eventTime );
         }
 
-        /**
-         * @param operations Redis operations
-         * @return Empty {@link List} if {@code clockKey} was concurrently modified else returns
-         * {@code [version, queue size]}
-         * @throws DataAccessException
-         */
-        @Override
-        @SuppressWarnings("unchecked")
-        public List<Long> execute(RedisOperations operations) throws DataAccessException {
-            operations.watch( clockKey );
-            operations.multi();
-            operations.opsForValue().increment( clockKey );
-            operations.opsForList().rightPush( queueId, eventTime );
-            return operations.exec();
-        }
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    public class VersionedRange implements SessionCallback<List> {
-
-        private final long start;
-        private final long end;
-
-        VersionedRange(long start, long end) {
-            this.start = start;
-            this.end = end;
+        Versioned<EventTime> pollResultToObj(@NonNull List<?> rawResult) throws IllegalArgumentException {
+            return switch (rawResult.size()) {
+                case 0 -> null;
+                case 2 -> toVersionedEventTime( rawResult );
+                default ->
+                        throw new IllegalArgumentException( "Received an improperly formatted response from server." );
+            };
         }
 
-        /**
-         * @param operations Redis operations
-         * @return empty list if {@code clockKey} was concurrently modified, else a list
-         * {@code [ (long) clock, [EventTimes...] ]} <em>note: </em> range data is a nested list
-         * @throws DataAccessException
-         */
-        @Override
-        public List execute(RedisOperations operations) throws DataAccessException {
-            operations.watch( clockKey );
-            operations.multi();
-            operations.opsForValue().increment( clockKey );
-            eventTimeTemplate.opsForList().range( queueId, start, end );
-            return operations.exec();
+        Versioned<List<EventTime>> getRangeToObj(@NonNull List<?> rawResult) throws IllegalArgumentException {
+            if (rawResult.size() != 2) {
+                throw new IllegalArgumentException( "Improper result format." );
+            }
+            long version;
+            List<EventTime> elements;
+            try {
+                List<?> rawElements = (List<?>) rawResult.get( 0 );
+                version = (long) rawResult.get( 1 );
+                elements = rawElements.stream().map( rawElement -> toEventTime( (String) rawElement ) ).toList();
+            } catch (ClassCastException e) {
+                throw new IllegalArgumentException( "Improper result format.  Unexpected types." );
+            }
+            return new Versioned<>( version, elements );
         }
 
+        String serializeEventTime(@NonNull EventTime eventTime) throws IllegalArgumentException {
+            try {
+                return objectMapper.writer().writeValueAsString( eventTime );
+            } catch (JsonProcessingException e) {
+                throw new IllegalArgumentException( "Unable to serialize EventTime.", e );
+            }
+        }
+
+        EventTime toEventTime(@NonNull String eventTimeJson) {
+            try {
+                return objectMapper.readValue( eventTimeJson, EventTime.class );
+            } catch (JsonProcessingException e) {
+                throw new IllegalArgumentException( "Encountered error while deserializing EventTime JSON.", e );
+            }
+        }
     }
 
 

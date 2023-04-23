@@ -8,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import redis.clients.jedis.Jedis;
 
 import java.util.List;
@@ -95,7 +97,7 @@ public class StrictlyOnceMap {
         }
     }
 
-
+    @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}", backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}", multiplierExpression = "${app.redis.retry.multiplier}"))
     public TimeIsValidDiff putEvent(@NonNull String eventKey, long time, @NonNull String clockKey,
                                     long eventDurationMillis) throws IllegalStateException {
         List<?> rawResult;
@@ -120,6 +122,7 @@ public class StrictlyOnceMap {
         }
     }
 
+    @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}", backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}", multiplierExpression = "${app.redis.retry.multiplier}"))
     public EventHash getEventHash(@NonNull String eventKey) throws IllegalStateException {
         List<Long> values = stringLongTemplate.opsForHash()
                 .multiGet( eventKey, List.of( timeIdentifier, isValidIdentifier, retiredIdentifier ) ).stream()

@@ -1,8 +1,5 @@
 package com.ericgha.config;
 
-import com.ericgha.dto.EventTime;
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,7 +13,6 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericToStringSerializer;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
@@ -26,15 +22,13 @@ public class RedisConfig {
     Resource redisFunctions;
 
     @Bean
-    Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer() {
-        ObjectMapper om = new ObjectMapper();
-        om.setVisibility( PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY );
-        return new Jackson2JsonRedisSerializer<>( om, EventTime.class );
+    StringRedisSerializer stringRedisSerializer() {
+        return new StringRedisSerializer();
     }
 
     @Bean
-    StringRedisSerializer stringRedisSerializer() {
-        return new StringRedisSerializer();
+    ObjectMapper objectMapper() {
+        return new ObjectMapper();
     }
 
 
@@ -50,6 +44,7 @@ public class RedisConfig {
         config.setPassword( redisPassword );
         JedisClientConfiguration clientConfiguration = JedisClientConfiguration.builder()
                 .clientName( redisHostname )
+                .usePooling()
                 .build();
         return new JedisConnectionFactory( config, clientConfiguration );
     }
@@ -74,31 +69,11 @@ public class RedisConfig {
     }
 
     @Bean
-    @Qualifier("eventTimeTemplate")
-    @ConditionalOnProperty(name = "app.redis.disable-bean.event-time-redis-template", havingValue = "false",
-            matchIfMissing = true)
-    FunctionRedisTemplate<String, EventTime> eventTimeTemplate(RedisConnectionFactory redisConnectionFactory,
-                                                               StringRedisSerializer stringRedisSerializer,
-                                                               Jackson2JsonRedisSerializer<EventTime> jackson2JsonRedisSerializer) {
-        FunctionRedisTemplate<String, EventTime> template = new FunctionRedisTemplate<>( redisFunctions );
-        template.setConnectionFactory( redisConnectionFactory );
-        // keys use string serializer
-        template.setKeySerializer( stringRedisSerializer );
-        template.setHashKeySerializer( stringRedisSerializer );
-        // values use json serializer
-        template.setValueSerializer( jackson2JsonRedisSerializer );
-        template.setHashValueSerializer( jackson2JsonRedisSerializer );
-        template.setEnableTransactionSupport( true );
-        template.afterPropertiesSet();
-        return template;
-    }
-
-    @Bean
     @Qualifier("stringLongTemplate")
     @ConditionalOnProperty(name = "app.redis.disable-bean.string-long-redis-template", havingValue = "false",
             matchIfMissing = true)
     FunctionRedisTemplate<String, Long> stringLongTemplate(RedisConnectionFactory redisConnectionFactory,
-                                                                StringRedisSerializer stringRedisSerializer) {
+                                                           StringRedisSerializer stringRedisSerializer) {
         FunctionRedisTemplate<String, Long> template = new FunctionRedisTemplate<>( redisFunctions );
         GenericToStringSerializer<Long> longSerializer = new GenericToStringSerializer<>( Long.class );
         // keys

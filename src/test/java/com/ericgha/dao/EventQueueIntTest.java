@@ -6,6 +6,7 @@ import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
 import com.ericgha.test_fixtures.EnableRedisTestContainer;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,20 +28,23 @@ public class EventQueueIntTest {
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    @Qualifier("eventTimeTemplate")
-    FunctionRedisTemplate<String, EventTime> eventTimeTemplate;
+    ObjectMapper objectMapper;
+    @Autowired
+    @Qualifier("stringTemplate")
+    FunctionRedisTemplate<String, String> stringTemplate;
 
     EventQueue eventQueue;
 
     @BeforeEach
     void before() {
-        eventQueue = new EventQueue( eventTimeTemplate, keyMaker );
+        eventQueue = new EventQueue( stringTemplate, objectMapper, keyMaker );
     }
 
     @AfterEach
     public void afterEach() {
-        RedisConnection connection = connectionFactory.getConnection();
-        connection.commands().flushAll();
+        try (RedisConnection connection = connectionFactory.getConnection()) {
+            connection.commands().flushAll();
+        }
     }
 
     @Test
@@ -101,6 +105,16 @@ public class EventQueueIntTest {
         Versioned<EventTime> versionedEvent = eventQueue.tryPoll( threshold );
         Assertions.assertEquals( event, versionedEvent.data(), "Event is expected" );
         Assertions.assertTrue( versionedEvent.clock() > 0, "clock > 0" );
+    }
+
+    @Test
+    public void tryPollDoesNotIncrementClockWhenNoElementPolled() {
+        EventTime event = new EventTime( "Test Event", 1 );
+        eventQueue.offer( event );
+        long expectedClock = eventQueue.getClock();
+        eventQueue.tryPoll( 0 );
+        long foundClock = eventQueue.getClock();
+        Assertions.assertEquals( expectedClock, foundClock, "Clock should not change on a null poll." );
     }
 
     @Test

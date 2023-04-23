@@ -4,6 +4,8 @@ import com.ericgha.config.FunctionRedisTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.params.SetParams;
 
@@ -40,6 +42,7 @@ public class OnlyOnceMap {
      * @param expireAtMilli when event should expire
      * @return {@code true} if update occurred {@code false}
      */
+    @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}", backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}", multiplierExpression = "${app.redis.retry.multiplier}"))
     public boolean putEvent(String eventKey, long timeMilli, long expireAtMilli) {
         String reply;
         // redis template doesn't allow NX with PX option for set

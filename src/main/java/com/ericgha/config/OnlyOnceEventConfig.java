@@ -1,22 +1,21 @@
 package com.ericgha.config;
 
-import com.ericgha.dao.OnlyOnceMap;
 import com.ericgha.dao.EventQueue;
+import com.ericgha.dao.OnlyOnceMap;
 import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventStatus;
-import com.ericgha.dto.EventTime;
-import com.ericgha.exception.RetryableException;
 import com.ericgha.service.EventQueueSnapshotService;
 import com.ericgha.service.EventService;
 import com.ericgha.service.data.EventExpiryService;
-import com.ericgha.service.data.OnlyOnceEventMapService;
 import com.ericgha.service.data.EventQueueService;
+import com.ericgha.service.data.OnlyOnceEventMapService;
 import com.ericgha.service.event_consumer.AlwaysPublishesEventConsumer;
 import com.ericgha.service.event_consumer.EventConsumer;
-import com.ericgha.service.status_mapper.EventMapper;
-import com.ericgha.service.status_mapper.ToEventStatusAlwaysValid;
 import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
 import com.ericgha.service.snapshot_consumer.SnapshotSTOMPMessenger;
+import com.ericgha.service.status_mapper.EventMapper;
+import com.ericgha.service.status_mapper.ToEventStatusAlwaysValid;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,14 +23,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.retry.support.RetryTemplate;
+import org.springframework.retry.annotation.EnableRetry;
 
 @Configuration
+@EnableRetry
 public class OnlyOnceEventConfig {
 
-    @Autowired
-    @Qualifier("eventTimeTemplate")
-    FunctionRedisTemplate<String, EventTime> eventTimeTemplate;
     @Autowired
     @Qualifier("stringTemplate")
     FunctionRedisTemplate<String, String> stringTemplate;
@@ -40,32 +37,23 @@ public class OnlyOnceEventConfig {
     String stompPrefix;
     @Value("${app.only-once-event.event-duration-millis}")
     long eventDuration;
-    @Value("${app.only-once-event.key-prefix}") String keyPrefix;
+    @Value("${app.only-once-event.key-prefix}")
+    String keyPrefix;
 
     @Bean
     @Qualifier("onlyOnceKeyMaker")
     KeyMaker keyMaker() {
-        return new KeyMaker(keyPrefix);
+        return new KeyMaker( keyPrefix );
     }
 
     // todo move these to their own config class
-    @Bean
-    @Qualifier("eventQueueRetryTemplate")
-    RetryTemplate eventQueueRetry(@Value("${app.only-once-event.event-queue.retry.num-attempts}") int numAttempts,
-                                  @Value("${app.only-once-event.event-queue.retry.interval}") long interval) {
-        return RetryTemplate.builder()
-                .fixedBackoff( interval )
-                .maxAttempts( numAttempts )
-                .retryOn( RetryableException.class )
-                .build();
-    }
 
     @Bean
     @Qualifier("onlyOnceEventQueueService")
     EventQueueService onlyOnceEventQueue(@Qualifier("onlyOnceKeyMaker") KeyMaker keyMaker,
-                                         @Qualifier("eventQueueRetryTemplate") RetryTemplate retryTemplate) {
-        EventQueue eventQueue = new EventQueue( eventTimeTemplate, keyMaker );
-        return new EventQueueService( eventQueue, retryTemplate );
+                                         ObjectMapper objectMapper) {
+        EventQueue eventQueue = new EventQueue( stringTemplate, objectMapper, keyMaker );
+        return new EventQueueService( eventQueue );
     }
 
     @Bean
@@ -83,6 +71,8 @@ public class OnlyOnceEventConfig {
         return new AlwaysPublishesEventConsumer( messageTemplate, stompPrefix );
     }
 
+    // this only requires the queue for snapshotting and publication of events at end time, an only once EventService
+    // w/o these requirements could be implemented without the queue
     @Bean
     @Qualifier("onlyOnceEventService")
     @ConditionalOnProperty(name = "app.only-once-event.disable-bean.event-service", havingValue = "false",
@@ -92,7 +82,7 @@ public class OnlyOnceEventConfig {
             SimpMessagingTemplate simpMessagingTemplate,
             @Qualifier("onlyOnceEventQueueService") EventQueueService eventQueueService,
             @Qualifier("onlyOnceEventMapService") OnlyOnceEventMapService eventMapService) {
-        return new EventService(stompPrefix, maxEvents, simpMessagingTemplate, eventQueueService, eventMapService);
+        return new EventService( stompPrefix, maxEvents, simpMessagingTemplate, eventQueueService, eventMapService );
     }
 
     @Bean

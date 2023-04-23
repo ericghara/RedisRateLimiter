@@ -4,7 +4,6 @@ import com.ericgha.dao.EventQueue;
 import com.ericgha.dao.StrictlyOnceMap;
 import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventStatus;
-import com.ericgha.dto.EventTime;
 import com.ericgha.service.EventQueueSnapshotService;
 import com.ericgha.service.EventService;
 import com.ericgha.service.data.EventExpiryService;
@@ -17,14 +16,16 @@ import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
 import com.ericgha.service.snapshot_consumer.SnapshotSTOMPMessenger;
 import com.ericgha.service.status_mapper.EventMapper;
 import com.ericgha.service.status_mapper.ToEventStatusCheckingValidity;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.retry.support.RetryTemplate;
+import org.springframework.retry.annotation.EnableRetry;
 
 @Configuration
+@EnableRetry
 public class StrictlyOnceEventConfig {
 
     @Value("${app.web-socket.prefix.client}/${app.strictly-once-event.web-socket.element}")
@@ -82,12 +83,11 @@ public class StrictlyOnceEventConfig {
 
     @Bean
     @Qualifier("strictlyOnceEventQueueService")
-    EventQueueService strictlyOnceEventQueueService(FunctionRedisTemplate<String, EventTime> redisTemplate,
-                                                    @Qualifier("eventQueueRetryTemplate") RetryTemplate retryTemplate,
+    EventQueueService strictlyOnceEventQueueService(FunctionRedisTemplate<String, String> redisTemplate,
+                                                    ObjectMapper objectMapper,
                                                     @Qualifier("strictlyOnceKeyMaker") KeyMaker keyMaker) {
-        // todo retry template should be global not per rate limiter
-        EventQueue eventQueue = new EventQueue( redisTemplate, keyMaker );
-        return new EventQueueService( eventQueue, retryTemplate );
+        EventQueue eventQueue = new EventQueue( redisTemplate, objectMapper, keyMaker );
+        return new EventQueueService( eventQueue );
     }
 
     @Bean
@@ -105,7 +105,7 @@ public class StrictlyOnceEventConfig {
     @Qualifier("strictlyOnceEventService")
     EventService strictlyOnceEventService(StrictlyOnceMapService mapService,
                                           @Qualifier("strictlyOnceEventQueueService")
-                                                      EventQueueService eventQueueService,
+                                          EventQueueService eventQueueService,
                                           SimpMessagingTemplate simpMessagingTemplate) {
         return new EventService( stompPrefix, maxEvents, simpMessagingTemplate, eventQueueService,
                                  mapService );

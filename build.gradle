@@ -20,6 +20,7 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework:spring-aspects'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
     implementation 'redis.clients:jedis'
     implementation "com.fasterxml.jackson.core:jackson-databind"

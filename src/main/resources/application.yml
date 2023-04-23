@@ -16,17 +16,7 @@ app:
     key-prefix: "only-once"
     web-socket:
       element: "only-once"
-    event-map:
-      retry:
-        # configured to do 5 attempts (t = 0, 0.5, 1.25, 2.375, 4.063 sec)
-        initial-interval: 500
-        multiplier: 1.5
-        num-attempts: 5
     event-queue:
-      retry:
-        # 5 attempts with 3ms delay between each
-        num-attempts: 5
-        interval: 3
       num-workers: 2
     # for testing
     disable-bean:
@@ -46,11 +36,15 @@ app:
     num-frames: 20
   redis:
     functions-resource: redis/redis_functions.lua
+    retry:
+      # configured to do 5 attempts (t = 0, 0.25, 0.63, 1.19, 2.03 sec)
+      initial-interval: 250
+      multiplier: 1.5
+      num-attempts: 5
     # for testing
     disable-bean:
       redis-connection-factory: false
       string-redis-template: false
-      event-time-redis-template: false
       string-long-redis-template: false
 
 
@@ -59,4 +53,4 @@ logging:
     org:
       springframework: info
     com:
-      ericgha: debug
+      ericgha: info

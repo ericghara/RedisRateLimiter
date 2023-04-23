@@ -18,8 +18,6 @@ local function put_event(keys, args)
     local newTime = tonumber(args[1])
     local durationMillis = tonumber(args[2])
 
-
-
     if not (newTime and durationMillis) then
         -- tonumber returns nil on number conversion error
         return redis.error_reply("Unable to convert time or durationMillis to a number")
@@ -69,7 +67,78 @@ local function put_event(keys, args)
 
     local nextState = { updatedTime, updatedIsValid }
     curState = { curTime, isValid } -- converting to numeric type
-    return { curState, nextState,  updatedClock}  -- updatedClock nil unless state changed
+    return { curState, nextState, updatedClock }  -- updatedClock nil unless state changed
 end
 
 redis.register_function("PUT_EVENT", put_event)
+
+-- keys: {queueKey, clockKey} args: {thresholdTime}
+-- return: null or { EventTime (JSON dump), clock (number)}
+local function poll_queue(keys, args)
+    if (not #keys == 2 or not #args == 1) then
+        redis.error_reply("Invalid keys or arguments.")
+    end
+
+    local queueKey = keys[1]
+    local clockKey = keys[2]
+    local thresholdTime = tonumber(args[1])
+    local jsonTimeKey = 'time'
+
+    local polled = redis.call("LINDEX", queueKey, 0)
+    if not polled then
+        return nil
+    end
+    local polledTime = cjson.decode(polled)[jsonTimeKey]
+    if polledTime == nil then
+        redis.error_reply("Improperly formatted list element.")
+    end
+    if polledTime > thresholdTime then
+        return nil
+    end
+    local clock = redis.call("INCR", clockKey)
+    redis.call("LPOP", queueKey)
+    return { polled, clock }
+end
+
+redis.register_function("POLL_QUEUE", poll_queue)
+
+-- keys: {queueKey, clockKey} args: {eventJson}
+-- return: clock (number) after offer
+local function offer_queue(keys, args)
+    if (not #keys == 2 or #args == 1) then
+        redis.error_reply("Invalid keys or arguments.")
+    end
+
+    local queueKey = keys[1]
+    local clockKey = keys[2]
+    local eventJson = args[1]
+
+    redis.call("RPUSH", queueKey, eventJson)
+    return redis.call("INCR", clockKey)
+end
+
+redis.register_function("OFFER_QUEUE", offer_queue)
+
+-- keys: {queueKey, clockKey}, args: {startIndex, endIndex}
+-- return: {elements (table of JSON serialized EventTime), clock (number) }
+local function range_queue(keys, args)
+    if (not #keys == 2 or #args == 2) then
+        redis.error_reply("Invalid keys or arguments.")
+    end
+
+    local queueKey = keys[1]
+    local clockKey = keys[2]
+    local startIndex = tonumber(args[1])
+    local endIndex = tonumber(args[2])
+
+    if (startIndex == nil or endIndex == nil) then
+        redis.error_reply("Could not convert arguments to numbers.")
+    end
+
+    local elements = redis.call("LRANGE", queueKey, startIndex, endIndex)
+    local clock = redis.call("INCR", clockKey)
+
+    return {elements, clock}
+end
+
+redis.register_function("RANGE_QUEUE", range_queue)

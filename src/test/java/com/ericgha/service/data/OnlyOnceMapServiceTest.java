@@ -2,10 +2,9 @@ package com.ericgha.service.data;
 
 import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.config.OnlyOnceEventConfig;
-import com.ericgha.config.RedisConfig;
 import com.ericgha.dao.OnlyOnceMap;
 import com.ericgha.domain.KeyMaker;
-import com.ericgha.dto.EventTime;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,19 +19,18 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import java.time.Instant;
 
-@SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class})
+@SpringBootTest(classes = {OnlyOnceEventConfig.class})
 public class OnlyOnceMapServiceTest {
+    @MockBean
+    ObjectMapper objectMapper;  // just mocked to load context
+
+    @MockBean
+    @Qualifier("stringTemplate")
+    FunctionRedisTemplate<String, String> stringTemplate; // just mocked to load context
 
     @MockBean
     OnlyOnceMap eventMapMock;
 
-    @MockBean
-    @Qualifier("stringTemplate")
-    FunctionRedisTemplate<String, String> stringTemplate;
-
-    @MockBean
-    @Qualifier("eventTimeTemplate")
-    FunctionRedisTemplate<String, EventTime> eventTimeTemplate;
 
     @Autowired
     @Qualifier("onlyOnceKeyMaker")
@@ -45,13 +43,9 @@ public class OnlyOnceMapServiceTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         // 5 invocations over approximately 5ms.  Should be approximately linear
-        registry.add( "app.redis.retry.initial-interval", () -> 1 );
-        registry.add( "app.redis.retry.multiplier", () -> 1.001 );
-        registry.add( "app.redis.retry.num-attempts", () -> 5 );
         // disable beans
         registry.add( "app.redis.disable-bean.redis-connection-factory", () -> true );
         registry.add( "app.redis.disable-bean.string-redis-template", () -> true );
-        registry.add( "app.redis.disable-bean.event-time-redis-template", () -> true );
         registry.add( "app.redis.disable-bean.string-long-redis-template", () -> true );
         registry.add( "app.only-once-event.disable-bean.event-expiry-service", () -> true );
         registry.add( "app.only-once-event.disable-bean.event-queue-snapshot-service", () -> true );
@@ -71,10 +65,11 @@ public class OnlyOnceMapServiceTest {
                 .putEvent( Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong() );
         String event = "testEvent";
         long timeMilli = Instant.now().toEpochMilli();
-        Assertions.assertTrue(eventMapService.putEvent( "testEvent", timeMilli ), "expected return");
+        Assertions.assertTrue( eventMapService.putEvent( "testEvent", timeMilli ), "expected return" );
         String expectedKey = keyMaker.generateEventKey( event );
         Mockito.verify( eventMapMock ).putEvent( expectedKey, timeMilli, timeMilli + EVENT_DURATION );
     }
+
     @Test
     @DisplayName("putEvent returns false and does not involve DAO for an already ended event")
     public void putEventReturnsFalseOnExpiredEvent() {
