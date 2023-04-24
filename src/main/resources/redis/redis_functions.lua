@@ -73,7 +73,7 @@ end
 redis.register_function("PUT_EVENT", put_event)
 
 -- keys: {queueKey, clockKey} args: {thresholdTime}
--- return: null or { EventTime (JSON dump), clock (number), length queue (number)}
+-- return: {length queue (number)} or { EventTime (JSON dump), clock (number), length queue (number)}
 local function poll_queue(keys, args)
     if (not #keys == 2 or not #args == 1) then
         redis.error_reply("Invalid keys or arguments.")
@@ -86,14 +86,14 @@ local function poll_queue(keys, args)
 
     local polled = redis.call("LINDEX", queueKey, 0)
     if not polled then
-        return nil
+        return {0}
     end
     local polledTime = cjson.decode(polled)[jsonTimeKey]
     if polledTime == nil then
         redis.error_reply("Improperly formatted list element.")
     end
     if polledTime > thresholdTime then
-        return nil
+        return {redis.call("LLEN", queueKey)}
     end
     local clock = redis.call("INCR", clockKey)
     local length = redis.call("LLEN", queueKey)
@@ -114,8 +114,8 @@ local function offer_queue(keys, args)
     local clockKey = keys[2]
     local eventJson = args[1]
 
-    redis.call("RPUSH", queueKey, eventJson)
-    return {redis.call("INCR", clockKey), redis.call("LLEN", queueKey)}
+    local queueLength = redis.call("RPUSH", queueKey, eventJson)
+    return {redis.call("INCR", clockKey), queueLength}
 end
 
 redis.register_function("OFFER_QUEUE", offer_queue)

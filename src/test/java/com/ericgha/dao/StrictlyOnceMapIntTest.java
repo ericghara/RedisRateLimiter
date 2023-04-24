@@ -22,8 +22,10 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -49,7 +51,7 @@ public class StrictlyOnceMapIntTest {
 
     @AfterEach
     public void afterEach() {
-        try (RedisConnection connection = connectionFactory.getConnection() )  {
+        try (RedisConnection connection = connectionFactory.getConnection()) {
             connection.commands().flushAll();
         }
     }
@@ -206,6 +208,39 @@ public class StrictlyOnceMapIntTest {
         EventHash foundState = strictlyOnceMap.getEventHash( firstEarliest.event() );
         EventHash expectedState = new EventHash( thirdMiddle.time(), false, firstEarliest.time() );
         Assertions.assertEquals( expectedState, foundState );
+    }
+
+    @Test
+    @DisplayName("multiGetEventHash returns empty list when provided no events")
+    void multiGetEventHashReturnsEmptyListWhenNoEventsProvided() {
+        List<EventHash> found = strictlyOnceMap.multiGetEventHash( List.of() );
+        Assertions.assertEquals( List.of(), found );
+    }
+
+    @Test
+    @DisplayName("multiGetEventHash returns hashes when keys found")
+    void multiGetEventHashReturnsHashesWhenKeysFound() {
+        EventTime firstEarliest = new EventTime( "Test 1", Instant.now().toEpochMilli() );
+        EventTime secondMiddle = new EventTime( "Test 2", firstEarliest.time() + 1 );
+        EventTime thirdMiddle = new EventTime( "Test 3", firstEarliest.time() + 2 );
+        List<EventTime> eventTimes = List.of( firstEarliest, secondMiddle, thirdMiddle );
+        strictlyOnceMap.putEvent( firstEarliest.event(), firstEarliest.time(), CLOCK_KEY, EVENT_DURATION );
+        strictlyOnceMap.putEvent( secondMiddle.event(), secondMiddle.time(), CLOCK_KEY, EVENT_DURATION );
+        strictlyOnceMap.putEvent( thirdMiddle.event(), thirdMiddle.time(), CLOCK_KEY, EVENT_DURATION );
+        List<String> eventKeys = eventTimes.stream().map( EventTime::event ).toList();
+        List<EventHash> found = strictlyOnceMap.multiGetEventHash( eventKeys );
+        List<EventHash> expected = eventTimes.stream().map( e -> new EventHash( e.time(), true, null ) ).toList();
+        Assertions.assertEquals( expected, found );
+    }
+
+    @Test
+    @DisplayName("multiGet returns empty hashes when keys not found")
+    void multiGetReturnsEmptyHashesWhenKeysNotFound() {
+        // notice these never added to map
+        List<String> eventKeys = List.of("Not in map 1", "Not in map 2","Not in map 3");
+        List<EventHash> found = strictlyOnceMap.multiGetEventHash( eventKeys );
+        List<EventHash> expected = IntStream.range(0,3).mapToObj( e -> new EventHash( null, null, null ) ).toList();
+        Assertions.assertEquals( expected, found );
     }
 
 }

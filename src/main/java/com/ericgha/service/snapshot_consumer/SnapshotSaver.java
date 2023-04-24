@@ -1,38 +1,38 @@
 package com.ericgha.service.snapshot_consumer;
 
-import com.ericgha.dto.EventStatus;
+import com.ericgha.dto.EventTime;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class SnapshotSaver implements SnapshotConsumer<EventStatus> {
+public class SnapshotSaver implements SnapshotConsumer {
 
-    private final Map<Long, List<EventStatus>> snapshots = new HashMap<>();
+    private final Map<Long, List<EventTime>> snapshots = new HashMap<>();
 
     /**
      * Ignores snapshots that are an empty list or null;
-     * @param timestamp the first input argument
+     * @param version the first input argument
      * @param snapshot the second input argument
      * @throws IllegalStateException if snapshot is not empty and timestamp already in map
      */
     @Override
-    public void accept(Long timestamp, List<EventStatus> snapshot) throws IllegalStateException {
-        if (snapshots.containsKey( timestamp )) {
-            throw new IllegalStateException(String.format("A snapshot with timestamp %d already exists.", timestamp));
+    public void accept(Long version, List<EventTime> snapshot) throws IllegalStateException {
+        if (snapshots.containsKey( version )) {
+            throw new IllegalStateException(String.format("A snapshot with timestamp %d already exists.", version));
         }
         if (snapshot.isEmpty()) {
             return;
         }
-        snapshots.put( timestamp, Collections.unmodifiableList(snapshot) );
+        snapshots.put( version, Collections.unmodifiableList(snapshot) );
     }
 
     /**
      *
      * @return snapshots by time as an unmodifiable map
      */
-    public Map<Long, List<EventStatus>> getSnapshots() {
+    public Map<Long, List<EventTime>> getSnapshots() {
         return Collections.unmodifiableMap(snapshots);
     }
 }

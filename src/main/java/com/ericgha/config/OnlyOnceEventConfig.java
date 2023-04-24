@@ -11,10 +11,9 @@ import com.ericgha.service.data.EventQueueService;
 import com.ericgha.service.data.OnlyOnceEventMapService;
 import com.ericgha.service.event_consumer.AlwaysPublishesEventConsumer;
 import com.ericgha.service.event_consumer.EventConsumer;
-import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
 import com.ericgha.service.snapshot_consumer.SnapshotSTOMPMessenger;
-import com.ericgha.service.status_mapper.EventMapper;
-import com.ericgha.service.status_mapper.ToEventStatusAlwaysValid;
+import com.ericgha.service.snapshot_mapper.SnapshotMapper;
+import com.ericgha.service.snapshot_mapper.ToSnapshotStatusAlwaysValid;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -52,8 +51,8 @@ public class OnlyOnceEventConfig {
     @Qualifier("onlyOnceEventQueueService")
     EventQueueService onlyOnceEventQueue(@Qualifier("onlyOnceKeyMaker") KeyMaker keyMaker,
                                          ObjectMapper objectMapper) {
-        EventQueue eventQueue = new EventQueue( stringTemplate, objectMapper, keyMaker );
-        return new EventQueueService( eventQueue );
+        EventQueue eventQueue = new EventQueue( stringTemplate, objectMapper );
+        return new EventQueueService( eventQueue, keyMaker );
     }
 
     @Bean
@@ -93,8 +92,7 @@ public class OnlyOnceEventConfig {
             @Value("${app.only-once-event.event-duration-millis}") int eventDuration,
             @Value("${app.only-once-event.event-queue.num-workers}") int numWorkers,
             @Qualifier("onlyOnceEventPublisher") EventConsumer eventPublisher,
-            @Qualifier("onlyOnceEventQueueService") EventQueueService eventQueueService,
-            @Qualifier("onlyOnceEventService") EventService onlyOnceEventService) {
+            @Qualifier("onlyOnceEventQueueService") EventQueueService eventQueueService) {
         EventExpiryService expiryService = new EventExpiryService( eventQueueService );
         expiryService.start( eventPublisher, eventDuration, numWorkers );
         return expiryService;
@@ -108,10 +106,11 @@ public class OnlyOnceEventConfig {
             SimpMessagingTemplate simpMessagingTemplate,
             @Qualifier("onlyOnceEventQueueService") EventQueueService eventQueueService) {
         EventQueueSnapshotService snapshotService = new EventQueueSnapshotService( eventQueueService );
-        EventMapper<EventStatus> mapper = new ToEventStatusAlwaysValid();
-        SnapshotConsumer<EventStatus> snapshotConsumer =
-                new SnapshotSTOMPMessenger( simpMessagingTemplate, stompPrefix );
-        snapshotService.run( eventDuration, mapper, snapshotConsumer );
+        SnapshotMapper<EventStatus> mapper = new ToSnapshotStatusAlwaysValid();
+        SnapshotSTOMPMessenger snapshotConsumer =
+                new SnapshotSTOMPMessenger( simpMessagingTemplate, stompPrefix, mapper );
+        snapshotConsumer.chunkSize( Integer.MAX_VALUE );
+        snapshotService.run( eventDuration, snapshotConsumer );
         return snapshotService;
     }
 

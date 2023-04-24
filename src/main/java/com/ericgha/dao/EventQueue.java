@@ -1,8 +1,8 @@
 package com.ericgha.dao;
 
 import com.ericgha.config.FunctionRedisTemplate;
-import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.PollResponse;
 import com.ericgha.dto.Versioned;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,18 +20,13 @@ import java.util.Objects;
 public class EventQueue {
 
     private final FunctionRedisTemplate<String, String> stringTemplate;
-    private final String queueKey;
-    private final String clockKey;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
     private final ObjectMappingTools objectMappingTools;
 
     // todo review comments after significant implementation changes
 
-    public EventQueue(FunctionRedisTemplate<String, String> stringTemplate, ObjectMapper objectMapper,
-                      KeyMaker keyMaker) {
+    public EventQueue(FunctionRedisTemplate<String, String> stringTemplate, ObjectMapper objectMapper) {
         this.stringTemplate = stringTemplate;
-        this.queueKey = keyMaker.generateQueueKey();
-        this.clockKey = keyMaker.generateClockKey();
         this.objectMappingTools = new ObjectMappingTools( objectMapper );
     }
 
@@ -45,7 +40,7 @@ public class EventQueue {
     @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
             backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
                     multiplierExpression = "${app.redis.retry.multiplier}"))
-    public Versioned<EventTime> tryPoll(long thresholdTime) throws IllegalStateException {
+    public PollResponse tryPoll(long thresholdTime, String queueKey, String clockKey) throws IllegalStateException {
         List<?> rawPoll;
         try (Jedis connection = stringTemplate.getJedisConnection()) {
             rawPoll = (List<?>) connection.fcall( "POLL_QUEUE", List.of( queueKey, clockKey ),
@@ -53,28 +48,34 @@ public class EventQueue {
         } catch (ClassCastException e) {
             throw new IllegalStateException( "Could not deserialize the DB response.", e );
         }
-        if (Objects.isNull( rawPoll )) {
-            return null;
+        try {
+            return objectMappingTools.toPollResponse( rawPoll );
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException( "Database returned an unexpected response format.", e );
         }
-        if (rawPoll.size() != 2) {
-            throw new IllegalStateException( ( "Could not deserialize the DB response" ) );
-        }
-        return objectMappingTools.toVersionedEventTime( rawPoll );
     }
 
     /**
      * @param event
-     * @return version based on an incrementing long
+     * @return Versioned length of queue
      * @throws IllegalArgumentException if any serialization errors occur
      * @throws IllegalStateException    if a non-numeric reply is returned from the DB
      */
     @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
             backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
                     multiplierExpression = "${app.redis.retry.multiplier}"))
-    public long offer(EventTime event) throws IllegalArgumentException, IllegalStateException {
+    public Versioned<Long> offer(EventTime event, String queueKey,
+                                 String clockKey) throws IllegalArgumentException, IllegalStateException {
         String eventJson = objectMappingTools.serializeEventTime( event );
+        List<?> rawResult;
         try (Jedis conn = stringTemplate.getJedisConnection()) {
-            return (long) conn.fcall( "OFFER_QUEUE", List.of( queueKey, clockKey ), List.of( eventJson ) );
+            rawResult = (List<?>) conn.fcall( "OFFER_QUEUE", List.of( queueKey, clockKey ), List.of( eventJson ) );
+        }
+        if (rawResult.size() != 2) {
+            throw new IllegalStateException( "Received an unexpected response form the DB." );
+        }
+        try {
+            return new Versioned<>( (long) rawResult.get( 0 ), (Long) rawResult.get( 1 ) );
         } catch (ClassCastException e) {
             throw new IllegalStateException( "Could not convert the reply to a long." );
         }
@@ -89,7 +90,8 @@ public class EventQueue {
     @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
             backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
                     multiplierExpression = "${app.redis.retry.multiplier}"))
-    public Versioned<List<EventTime>> getRange(long start, long end) throws IllegalStateException {
+    public Versioned<List<EventTime>> getRange(long start, long end, String queueKey,
+                                               String clockKey) throws IllegalStateException {
         List<?> rawResponse;
         try (Jedis conn = stringTemplate.getJedisConnection()) {
             rawResponse = (List<?>) conn.fcall( "RANGE_QUEUE", List.of( queueKey, clockKey ), List.of( "0", "-1" ) );
@@ -102,29 +104,21 @@ public class EventQueue {
     @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
             backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
                     multiplierExpression = "${app.redis.retry.multiplier}"))
-    public long size() {
+    public long size(String queueKey) {
         // should not return null b/c not used in pipeline or transaction (see documentation)
         return stringTemplate.opsForList().size( queueKey );
-    }
-
-    public String clockKey() {
-        return this.clockKey;
-    }
-
-    public String queueId() {
-        return this.queueKey;
     }
 
 
     @Nullable
         // convenience method for testing
-    String peek() {
+    String peek(String queueKey) {
         return stringTemplate.opsForList().index( queueKey, 0 );
     }
 
     @Nullable
         // convenience method for testing
-    EventTime poll() {
+    EventTime poll(String queueKey) {
         String rawJson = stringTemplate.opsForList().leftPop( queueKey );
         if (Objects.isNull( rawJson )) {
             return null;
@@ -133,7 +127,7 @@ public class EventQueue {
     }
 
     @Nullable
-    Long getClock() {
+    Long getClock(String clockKey) {
         String numStr = stringTemplate.opsForValue().get( clockKey );
         if (Objects.isNull( numStr )) {
             return null;
@@ -157,7 +151,7 @@ public class EventQueue {
             String jsonData;
             try {
                 jsonData = (String) rawResult.get( 0 );
-                version = (long) rawResult.get( 1 );
+                version = toLong( rawResult, 1 );
             } catch (ClassCastException e) {
                 throw new IllegalArgumentException( "Unable to deserialize version to a Long.", e );
             }
@@ -165,27 +159,44 @@ public class EventQueue {
             return new Versioned<>( version, eventTime );
         }
 
-        Versioned<EventTime> pollResultToObj(@NonNull List<?> rawResult) throws IllegalArgumentException {
+        private long toLong(List<?> rawResult, int index) throws IllegalArgumentException {
+            try {
+                return (long) rawResult.get( index );
+            } catch (Exception e) {
+                if (e instanceof ClassCastException || e instanceof NullPointerException ||
+                        e instanceof IndexOutOfBoundsException) {
+                    throw new IllegalArgumentException( "Improper input format.", e );
+                } else {
+                    throw e;
+                }
+            }
+        }
+
+        @Nullable
+        PollResponse toPollResponse(@NonNull List<?> rawResult) throws IllegalArgumentException {
             return switch (rawResult.size()) {
-                case 0 -> null;
-                case 2 -> toVersionedEventTime( rawResult );
-                default ->
-                        throw new IllegalArgumentException( "Received an improperly formatted response from server." );
+                case 1 -> new PollResponse( ( toLong( rawResult, 0 ) ) );
+                case 3 -> {
+                    Versioned<EventTime> versionedEvenTime = toVersionedEventTime( rawResult.subList( 0, 2 ) );
+                    long queueSize = toLong( rawResult, 2 );
+                    yield new PollResponse( versionedEvenTime, queueSize );
+                }
+                default -> throw new IllegalArgumentException( "Improper input format." );
             };
         }
 
         Versioned<List<EventTime>> getRangeToObj(@NonNull List<?> rawResult) throws IllegalArgumentException {
             if (rawResult.size() != 2) {
-                throw new IllegalArgumentException( "Improper result format." );
+                throw new IllegalArgumentException( "Improper input format." );
             }
             long version;
             List<EventTime> elements;
             try {
                 List<?> rawElements = (List<?>) rawResult.get( 0 );
-                version = (long) rawResult.get( 1 );
+                version = toLong( rawResult, 1 );
                 elements = rawElements.stream().map( rawElement -> toEventTime( (String) rawElement ) ).toList();
             } catch (ClassCastException e) {
-                throw new IllegalArgumentException( "Improper result format.  Unexpected types." );
+                throw new IllegalArgumentException( "Improper input format.  Unexpected types." );
             }
             return new Versioned<>( version, elements );
         }

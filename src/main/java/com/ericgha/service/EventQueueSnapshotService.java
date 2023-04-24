@@ -3,7 +3,6 @@ package com.ericgha.service;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
 import com.ericgha.service.data.EventQueueService;
-import com.ericgha.service.status_mapper.EventMapper;
 import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
 import jakarta.annotation.Nullable;
 import jakarta.annotation.PreDestroy;
@@ -24,9 +23,7 @@ public class EventQueueSnapshotService {
     private long periodMilli;
     private boolean isRunning;
     @Nullable
-    private EventMapper<?> eventMapper;
-    @Nullable
-    private SnapshotConsumer<?> snapshotConsumer;
+    private SnapshotConsumer snapshotConsumer;
     @Nullable
     private ScheduledExecutorService executorService;
     @Nullable
@@ -39,13 +36,12 @@ public class EventQueueSnapshotService {
         this.isRunning = false;
     }
 
-    public synchronized <T> void run(long periodMilli, @NonNull EventMapper<T> eventMapper,
-                                     @NonNull SnapshotConsumer<T> snapshotConsumer) throws IllegalStateException {
+    public synchronized <T> void run(long periodMilli,
+                                     @NonNull SnapshotConsumer snapshotConsumer) throws IllegalStateException {
         if (isRunning) {
             throw new IllegalStateException( "Cannot change state to run, this is already running." );
         }
         this.periodMilli = periodMilli;
-        this.eventMapper = eventMapper;
         this.snapshotConsumer = snapshotConsumer;
         this.executorService = Executors.newSingleThreadScheduledExecutor();
         this.isRunning = true;
@@ -80,7 +76,6 @@ public class EventQueueSnapshotService {
         }
         this.canceler.run();
         this.periodMilli = Integer.MAX_VALUE;
-        this.eventMapper = null;
         this.snapshotConsumer = null;
         this.executorService.close();
         this.executorService = null;
@@ -93,9 +88,7 @@ public class EventQueueSnapshotService {
     private void snapshot() {
         try {
             Versioned<List<EventTime>> versionedEvents = eventQueueService.getAll();
-            List<?> snapshot = versionedEvents.data().stream().map( eventMapper ).toList();
-            // this#run enforces same type for EventMapper<T> and SnapshotConsumer<T>
-            snapshotConsumer.accept( versionedEvents.clock(), (List) snapshot );
+            snapshotConsumer.accept( versionedEvents.clock(), versionedEvents.data() );
             log.debug( "Snapshot for queue: {} completed successfully.", eventQueueService.queueKey() );
         } catch (Exception e) {
             log.error( "Snapshot for queue: {} failed with exception: {}", eventQueueService.queueKey(), e );

@@ -1,6 +1,7 @@
 package com.ericgha.service.event_consumer;
 
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.Status;
 import com.ericgha.dto.Versioned;
 import com.ericgha.dto.message.PublishedEventMessage;
 import com.ericgha.service.data.StrictlyOnceMapService;
@@ -27,13 +28,14 @@ public class StrictlyOncePublisher implements EventConsumer {
     @Override
     public void accept(Versioned<EventTime> versionedEventTime) {
         EventTime eventTime = versionedEventTime.data();
-        if (!mapService.isValid( eventTime )) {
-            log.debug( "Ignored an invalid event: " + versionedEventTime );
+        Status foundStatus = mapService.isValid( eventTime );
+        if ( foundStatus != Status.Valid) {
+            log.debug( "Ignored a(n) {} event: {}.", foundStatus.name(), versionedEventTime );
         } else {
             long version = versionedEventTime.clock();
             PublishedEventMessage message = new PublishedEventMessage( version, eventTime );
             messageTemplate.convertAndSend( messagePrefix, message );
-            log.debug("Published event: " + versionedEventTime);
+            log.debug( "Published event: " + versionedEventTime );
         }
     }
 }

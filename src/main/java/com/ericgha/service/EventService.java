@@ -32,7 +32,7 @@ public class EventService implements RateLimiter {
 
     @Override
     public HttpStatus acceptEvent(EventTime eventTime) {
-        if (queueService.size() >= maxEvents) {  // todo remove this check and integrate into putEvent
+        if (queueService.approxSize() >= maxEvents) {
             return HttpStatus.INSUFFICIENT_STORAGE;
         }
         boolean success;

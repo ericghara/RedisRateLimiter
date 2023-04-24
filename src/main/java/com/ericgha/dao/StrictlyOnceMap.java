@@ -6,6 +6,10 @@ import com.ericgha.dto.TimeIsValid;
 import com.ericgha.dto.TimeIsValidDiff;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 import org.springframework.retry.annotation.Backoff;
@@ -128,6 +132,27 @@ public class StrictlyOnceMap {
                 .multiGet( eventKey, List.of( timeIdentifier, isValidIdentifier, retiredIdentifier ) ).stream()
                 .map( l -> (Long) l ).toList();
         return toEventHash( values );
+    }
+
+    @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}", backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}", multiplierExpression = "${app.redis.retry.multiplier}"))
+    @SuppressWarnings("unchecked")
+    public List<EventHash> multiGetEventHash(@NonNull List<String> eventKeys) throws IllegalStateException {
+        List<?> rawHashes = (List<?>) stringLongTemplate.executePipelined( new SessionCallback<List<List<Long>>>() {
+
+            @Override
+            public List<List<Long>> execute(@NonNull RedisOperations operations) throws DataAccessException {
+                HashOperations<String,String,Long> opsForHash = operations.opsForHash();
+                for (String eventKey : eventKeys) {
+                   opsForHash.multiGet( eventKey, List.of( timeIdentifier, isValidIdentifier, retiredIdentifier ) );
+                }
+                return null;
+            }
+        });
+        try {
+            return rawHashes.stream().map(l -> (List<Long>) l).map(StrictlyOnceMap::toEventHash).toList();
+        } catch (ClassCastException e) {
+            throw new IllegalStateException("Received an unexpected response format from the database.", e);
+        }
     }
 
     // for testing

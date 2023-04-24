@@ -14,8 +14,8 @@ import com.ericgha.service.event_consumer.EventInvalidator;
 import com.ericgha.service.event_consumer.StrictlyOncePublisher;
 import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
 import com.ericgha.service.snapshot_consumer.SnapshotSTOMPMessenger;
-import com.ericgha.service.status_mapper.EventMapper;
-import com.ericgha.service.status_mapper.ToEventStatusCheckingValidity;
+import com.ericgha.service.snapshot_mapper.SnapshotMapper;
+import com.ericgha.service.snapshot_mapper.ToSnapshotStatusCheckingValidity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,13 +60,6 @@ public class StrictlyOnceEventConfig {
     }
 
     @Bean
-    @Qualifier("StrictlyOnceSnapshotConsumer")
-    SnapshotConsumer<EventStatus> strictlyOnceSnapshotConsumer(SimpMessagingTemplate messagingTemplate) {
-        return new SnapshotSTOMPMessenger( messagingTemplate, stompPrefix );
-
-    }
-
-    @Bean
     @Qualifier("strictlyOnceKeyMaker")
     KeyMaker strictlyOncekeyMaker() {
         return new KeyMaker( keyPrefix );
@@ -86,8 +79,8 @@ public class StrictlyOnceEventConfig {
     EventQueueService strictlyOnceEventQueueService(FunctionRedisTemplate<String, String> redisTemplate,
                                                     ObjectMapper objectMapper,
                                                     @Qualifier("strictlyOnceKeyMaker") KeyMaker keyMaker) {
-        EventQueue eventQueue = new EventQueue( redisTemplate, objectMapper, keyMaker );
-        return new EventQueueService( eventQueue );
+        EventQueue eventQueue = new EventQueue( redisTemplate, objectMapper );
+        return new EventQueueService( eventQueue, keyMaker );
     }
 
     @Bean
@@ -112,17 +105,20 @@ public class StrictlyOnceEventConfig {
     }
 
     @Bean
+    @Qualifier("strictlyOnceSnapshotConsumer")
+    SnapshotConsumer strictlyOnceSnapshotConsumer(StrictlyOnceMapService mapService,
+                                                  SimpMessagingTemplate messagingTemplate) {
+        SnapshotMapper<EventStatus> snapshotMapper = new ToSnapshotStatusCheckingValidity( mapService::isValid );
+        return new SnapshotSTOMPMessenger( messagingTemplate, stompPrefix, snapshotMapper);
+    }
+
+    @Bean
     @Qualifier("strictlyOnceSnapshotService")
     EventQueueSnapshotService strictlyOnceSnapshotService(
             @Qualifier("strictlyOnceEventQueueService") EventQueueService strictlyOnceQueueService,
-            StrictlyOnceMapService strictlyOnceEventMapService,
-            @Qualifier("strictlyOnceSnapshotConsumer") SnapshotConsumer<EventStatus> snapshotConsumer) {
+            @Qualifier("strictlyOnceSnapshotConsumer") SnapshotConsumer snapshotConsumer) {
         EventQueueSnapshotService snapshotService = new EventQueueSnapshotService( strictlyOnceQueueService );
-        EventMapper<EventStatus> eventMapper =
-                new ToEventStatusCheckingValidity( strictlyOnceEventMapService::isValid );
-        snapshotService.run( eventDuration, eventMapper, snapshotConsumer );
+        snapshotService.run( eventDuration, snapshotConsumer );
         return snapshotService;
     }
-
-
 }
