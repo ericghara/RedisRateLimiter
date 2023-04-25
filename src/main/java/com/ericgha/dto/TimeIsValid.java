@@ -9,6 +9,12 @@ public class TimeIsValid {
     private final Long time;
     private final Boolean isValid;
 
+    /**
+     * A DTO for the {@code time} and {@code isValid} keys of the Event Hash
+     * @param time
+     * @param isValid
+     * @see EventHash
+     */
     public TimeIsValid(Long time, Boolean isValid) {
         this.time = time;
         this.isValid = isValid;

@@ -3,7 +3,12 @@ package com.ericgha.dto.message;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.MessageType;
 
-public record InvalidatedEventMessage(long timestamp, EventTime eventTime) implements EventStatusMessageInterface {
+/**
+ * A message dto for an Invalidated Event.
+ * @param clock the version clock for the event
+ * @param eventTime
+ */
+public record InvalidatedEventMessage(long clock, EventTime eventTime) implements EventStatusMessageInterface {
 
     public static final MessageType MESSAGE_TYPE = MessageType.INVALIDATED_EVENT;
 
@@ -15,20 +20,20 @@ public record InvalidatedEventMessage(long timestamp, EventTime eventTime) imple
     @Override
     public boolean equals(Object other) {
         if (other instanceof InvalidatedEventMessage otherMessage) {
-            return this.timestamp == otherMessage.timestamp && this.eventTime.equals(otherMessage.eventTime());
+            return this.clock == otherMessage.clock && this.eventTime.equals( otherMessage.eventTime());
         }
         return false;
     }
 
     @Override
     public int hashCode() {
-        int result = Long.hashCode( timestamp );
+        int result = Long.hashCode( clock );
         result = 31 * result + eventTime.hashCode();
         return result;
     }
 
     @Override
     public String toString() {
-        return String.format("InvalidatedEventMessage{timestamp=%d, eventTime=%s}", timestamp, eventTime);
+        return String.format( "InvalidatedEventMessage{clock=%d, eventTime=%s}", clock, eventTime);
     }
 }

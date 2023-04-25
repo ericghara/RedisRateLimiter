@@ -1,6 +1,6 @@
 package com.ericgha.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ericgha.service.data.FunctionRedisTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,12 +25,6 @@ public class RedisConfig {
     StringRedisSerializer stringRedisSerializer() {
         return new StringRedisSerializer();
     }
-
-    @Bean
-    ObjectMapper objectMapper() {
-        return new ObjectMapper();
-    }
-
 
     @Bean
     @ConditionalOnProperty(name = "app.redis.disable-bean.redis-connection-factory", havingValue = "false",

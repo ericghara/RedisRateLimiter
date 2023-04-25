@@ -10,6 +10,13 @@ public class EventHash {
     private final Boolean isValid;
     private final Long retired;
 
+    /**
+     * A DTO for event Hashes.
+     * @param time for latest event submitted to database (by timestamp)
+     * @param isValid if the event at {@code time} is valid
+     * @param retired the last event (if any) that completed in a valid state (i.e. successfully)
+     * @throws IllegalArgumentException
+     */
     public EventHash(@Nullable Long time, @Nullable Boolean isValid, @Nullable Long retired) throws IllegalArgumentException {
             this.time = time;
             this.isValid = isValid;

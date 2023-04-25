@@ -18,6 +18,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Abstracts lower level details of {@link StrictlyOnceMap} performing argument validation and translation of raw
+ * objects returned from the DB into domain objects.  Additionally, offers a {@code invalidator} callback to handle
+ * invalidation of events.
+ */
 public class StrictlyOnceMapService implements EventMapService {
 
     private final KeyMaker keyMaker;
@@ -30,6 +35,12 @@ public class StrictlyOnceMapService implements EventMapService {
     private EventConsumer invalidator;
     private final Logger log;
 
+    /**
+     *
+     * @param eventMap the DAO this service should use.  Multiple {@code StrictlyOnceMapService}s may share the same DAO.
+     * @param eventDurationMillis how long an event should incubate before being published (if not invalidated in the meantime).
+     * @param keyMaker generates keys used by this.
+     */
     public StrictlyOnceMapService(@NonNull StrictlyOnceMap eventMap, long eventDurationMillis,
                                   @NonNull KeyMaker keyMaker) {
         this.log = LoggerFactory.getLogger( this.getClass().getName() + ":" + keyMaker.keyPrefix() );
@@ -40,6 +51,13 @@ public class StrictlyOnceMapService implements EventMapService {
         this.invalidator = new NoOpEventConsumer();
     }
 
+    /**
+     * Puts an event into the map.  If the put triggers the invalidation of a previously valid event the {@code invalidator}
+     * callback is invoked.
+     *
+     * @param eventTime
+     * @return true if the event {@code isValid} after the put, else false.
+     */
     public boolean putEvent(EventTime eventTime) {
         String eventKey = keyMaker.generateEventKey( eventTime.event() );
         TimeIsValidDiff diff = eventMap.putEvent( eventKey, eventTime.time(), clockKey, eventDurationMillis );
@@ -53,8 +71,10 @@ public class StrictlyOnceMapService implements EventMapService {
     }
 
     /**
+     * Queries the validity of an {@link EventTime}.
      * @param eventTime
-     * @return
+     * @return {@code Valid}, {@code Invalid}, {@code Unknown} when the queried event is in the future or greater than
+     * {@code 2*eventDurationMilli} in the past.
      */
     public Status isValid(EventTime eventTime) {
         if (!isValidCheckArguments( eventTime )) {
@@ -69,6 +89,12 @@ public class StrictlyOnceMapService implements EventMapService {
         return determineStatus( curState, wantedTime );
     }
 
+    /**
+     * Checks validity of multiple {@code EventTime}s.
+     * @param eventTimes events to query
+     * @return an in order list of the event statuses
+     * @see StrictlyOnceMap
+     */
     public List<Status> isValid(List<EventTime> eventTimes) {
         List<String> eventKeys = eventTimes.stream().map( EventTime::event ).map( keyMaker::generateEventKey ).toList();
         List<EventHash> eventHashes = eventMap.multiGetEventHash( eventKeys );
@@ -88,6 +114,34 @@ public class StrictlyOnceMapService implements EventMapService {
             }
         }
         return statuses;
+    }
+
+    public void setInvalidator(@NonNull EventConsumer invalidHandler) throws IllegalArgumentException {
+        Objects.requireNonNull( invalidHandler, "Received a null invalidator" );
+        this.invalidator = invalidHandler;
+    }
+
+    /**
+     *
+     * @return the root of the keyspace of this
+     */
+    public String keyPrefix() {
+        return keyMaker.keyPrefix();
+    }
+
+    /**
+     *
+     * @return the clock key being used
+     */
+    public String clockKey() {
+        return clockKey;
+    }
+
+    /**
+     * @return milliseconds
+     */
+    public long eventDuration() {
+        return eventDurationMillis;
     }
 
     private Status determineStatus(EventHash eventHash, long wantedTime) {
@@ -116,31 +170,11 @@ public class StrictlyOnceMapService implements EventMapService {
         return true;
     }
 
-    public void setInvalidator(@NonNull EventConsumer invalidHandler) throws IllegalArgumentException {
-        Objects.requireNonNull( invalidHandler, "Received a null invalidator" );
-        this.invalidator = invalidHandler;
-    }
-
     private void setEventDuration(long millis) throws IllegalArgumentException {
         if (millis < 0) {
             throw new IllegalArgumentException( "Event duration must be a positive long" );
         }
         this.eventDurationMillis = millis;
-    }
-
-    public String keyPrefix() {
-        return keyMaker.keyPrefix();
-    }
-
-    public String clockKey() {
-        return clockKey;
-    }
-
-    /**
-     * @return milliseconds
-     */
-    public long eventDuration() {
-        return eventDurationMillis;
     }
 
     private boolean handleIfInvalidated(TimeIsValidDiff diff, String event) {

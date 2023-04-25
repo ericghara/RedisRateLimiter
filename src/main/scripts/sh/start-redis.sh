@@ -1,7 +1,7 @@
 #!/bin/sh
 
 REDIS_PASSWORD="password"
-REDIS_ARGS="--requirepass $REDIS_PASSWORD --save 60 1 --loglevel verbose"
+REDIS_ARGS="--requirepass $REDIS_PASSWORD --save 60 1 --loglevel warning"
 
 echo "=== Waiting for server startup ==="
 redis-server $REDIS_ARGS &

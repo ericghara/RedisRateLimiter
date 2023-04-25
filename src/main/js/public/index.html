@@ -51,10 +51,10 @@
           let subscription = client.subscribe(source, message => {
                   let messageJson = JSON.parse(message.body);
                   if (messageJson.messageType === "KEY_FRAME") {
-                      console.log(`${source} - ${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.snapshot)}`);
+                      console.log(`${source} - ${messageJson.messageType}@${messageJson.clock} - ${JSON.stringify(messageJson.snapshot)}`);
                   }
                   else {
-                      console.log(`${source} - ${messageJson.messageType}@${messageJson.timestamp} - ${JSON.stringify(messageJson.eventTime)}`);
+                      console.log(`${source} - ${messageJson.messageType}@${messageJson.clock} - ${JSON.stringify(messageJson.eventTime)}`);
                   }
               }
           )
@@ -68,21 +68,5 @@
       })
       client.activate();
   </script>
-
-  <!--  <script>-->
-  <!--    var socket = new WebSocket('ws://' + "localhost:8080" + '/ws');-->
-  <!--    socket.onopen = function () {-->
-  <!--      console.log(-->
-  <!--              'WebSocket connection is open.');-->
-  <!--    };-->
-  <!--    socket.onmessage = function (message) {-->
-  <!--      var text = "";-->
-  <!--      text += message.data + "\n";-->
-  <!--      document.getElementById("positions").innerText = text;-->
-  <!--    };-->
-  <!--    socket.onclose = function () {-->
-  <!--      console.log('WebSocket connection closed.');-->
-  <!--    };-->
-  <!--  </script>-->
 </head>
 <body>

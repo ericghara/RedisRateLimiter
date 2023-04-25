@@ -1,9 +1,9 @@
 package com.ericgha.dao;
 
-import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.PollResponse;
 import com.ericgha.dto.Versioned;
+import com.ericgha.service.data.FunctionRedisTemplate;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
@@ -17,13 +17,28 @@ import redis.clients.jedis.Jedis;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * {@code EventQueue} is a FIFO queue similar to a delay queue.  Offering to the queue is unremarkable, however polling
+ * is non-standard.  Polling requires a threshold time, elements in the queue with
+ * {@code clock  <= current-time - threshold-time} are polled.  An element at the head that doesn't meet this
+ * criteria is left on the queue.
+ * <p>
+ * As this is a FIFO queue, and timestamps are provided by the callers of the queue, out of order events will cause
+ * items to blocked.  An item at the tail of the queue could have an older clock than that at the head.  A poll with
+ * a threshold time that does not meet the criteria for the head item of the queue will block the tail item (and every other
+ * item in the queue meeting the threshold criteria) from being polled.
+ * <p>
+ * If an implementation requires that the queue remain in temporal order callers to the queue should be orchestrated
+ * to ensure that timestamps are monotonically increasing and offered sequentially.
+ * <p>
+ * Most queue operations return a scalar clock which is a monotonically increasing long.  Calls to {@link EventQueue}
+ * may be linearized based upon this clock.
+ */
 public class EventQueue {
 
     private final FunctionRedisTemplate<String, String> stringTemplate;
     private final Logger log = LoggerFactory.getLogger( this.getClass() );
     private final ObjectMappingTools objectMappingTools;
-
-    // todo review comments after significant implementation changes
 
     public EventQueue(FunctionRedisTemplate<String, String> stringTemplate, ObjectMapper objectMapper) {
         this.stringTemplate = stringTemplate;
@@ -82,9 +97,11 @@ public class EventQueue {
     }
 
     /**
-     * @param start
-     * @param end
-     * @return
+     * Returns a range of elements in the queue.  Indexing semantics follow those of redis lists.  This call is
+     * guaranteed to complete atomically.
+     * @param start start index
+     * @param end end index
+     * @return An in order list from start to end index (versioned by scalar clock)
      * @throws IllegalStateException if an error occurs deserializing the database response.
      */
     @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
@@ -101,6 +118,11 @@ public class EventQueue {
         }
     }
 
+    /**
+     * Get the size of the queue.
+     * @param queueKey key for the queue
+     * @return long size
+     */
     @Retryable(maxAttemptsExpression = "${app.redis.retry.num-attempts}",
             backoff = @Backoff(delayExpression = "${app.redis.retry.initial-interval}",
                     multiplierExpression = "${app.redis.retry.multiplier}"))
@@ -137,7 +159,7 @@ public class EventQueue {
 
 
     // Handling serialization/deserializaiton at class level is a debatable design decision.  Separate RedisTemplates
-    // for the one-off return type of tryPoll and one for EventTime felt too niche for so few operations
+    // for the one-off return type of tryPoll and one for EventTime felt too niche for such few operations
     static class ObjectMappingTools {
 
         private final ObjectMapper objectMapper;

@@ -1,10 +1,9 @@
 package com.ericgha.service.data;
 
-import com.ericgha.config.FunctionRedisTemplate;
 import com.ericgha.config.OnlyOnceEventConfig;
+import com.ericgha.dao.EventQueue;
 import com.ericgha.dao.OnlyOnceMap;
 import com.ericgha.domain.KeyMaker;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,11 +21,12 @@ import java.time.Instant;
 @SpringBootTest(classes = {OnlyOnceEventConfig.class})
 public class OnlyOnceMapServiceTest {
     @MockBean
-    ObjectMapper objectMapper;  // just mocked to load context
+    EventQueue queue;  // just mocked to load context
 
     @MockBean
     @Qualifier("stringTemplate")
-    FunctionRedisTemplate<String, String> stringTemplate; // just mocked to load context
+    FunctionRedisTemplate<String, String> stringTemplate;
+
 
     @MockBean
     OnlyOnceMap eventMapMock;
@@ -44,9 +44,6 @@ public class OnlyOnceMapServiceTest {
     static void properties(DynamicPropertyRegistry registry) {
         // 5 invocations over approximately 5ms.  Should be approximately linear
         // disable beans
-        registry.add( "app.redis.disable-bean.redis-connection-factory", () -> true );
-        registry.add( "app.redis.disable-bean.string-redis-template", () -> true );
-        registry.add( "app.redis.disable-bean.string-long-redis-template", () -> true );
         registry.add( "app.only-once-event.disable-bean.event-expiry-service", () -> true );
         registry.add( "app.only-once-event.disable-bean.event-queue-snapshot-service", () -> true );
         registry.add( "app.only-once-event.disable-bean.event-service", () -> true );

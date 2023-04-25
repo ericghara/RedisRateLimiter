@@ -9,6 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+/**
+ * Handles intake of events.  Has the typical interface of a rate limiter where events are generally accepted or rejected.
+ */
 public class EventService implements RateLimiter {
 
     private final Logger log;
@@ -19,6 +22,16 @@ public class EventService implements RateLimiter {
     private final EventMapService mapService;
 
 
+    /**
+     *
+     * <em>note</em> for efficiency queue size is approximated, ({@link EventQueueService#approxSize()})
+     *
+     * @param messagePrefix where {@link SubmittedEventMessage}s should be sent
+     * @param maxEvents the approximate maximum size of the queue (irrespective of status)
+     * @param msgTemplate the template used for messaging
+     * @param queueService the queue this service should offer events to
+     * @param mapService the map this service should manage
+     */
     public EventService(String messagePrefix, long maxEvents, SimpMessagingTemplate msgTemplate,
                         EventQueueService queueService, EventMapService mapService) {
         this.log =
@@ -30,24 +43,29 @@ public class EventService implements RateLimiter {
         this.mapService = mapService;
     }
 
+    /**
+     * @param eventTime event to try to add.
+     * @return 507 InsufficientStorage: if queued events >= {@code maxEvents}, 503 Service Unavailable: any error occurs,
+     * 201 Created: if event accepted, 409 Conflict: if the {@link EventMapService} rejects the event.
+     * {@code eventDuration}
+     */
     @Override
     public HttpStatus acceptEvent(EventTime eventTime) {
         if (queueService.approxSize() >= maxEvents) {
             return HttpStatus.INSUFFICIENT_STORAGE;
         }
-        boolean success;
         try {
-            success = mapService.putEvent( eventTime );
+            boolean success = mapService.putEvent( eventTime );
+            if (success) {
+                long clock = queueService.offer( eventTime );
+                SubmittedEventMessage submittedEventMessage = new SubmittedEventMessage( clock, eventTime );
+                msgTemplate.convertAndSend( messagePrefix, submittedEventMessage );
+                return HttpStatus.CREATED;
+            }
         } catch (Exception e) {
             log.info("Encountered an error while accepting: {}", eventTime);
             log.debug("Error while accepting {}: {}", eventTime, e);
             return HttpStatus.SERVICE_UNAVAILABLE;
-        }
-        if (success) {
-            long clock = queueService.offer( eventTime );
-            SubmittedEventMessage submittedEventMessage = new SubmittedEventMessage( clock, eventTime );
-            msgTemplate.convertAndSend( messagePrefix, submittedEventMessage );
-            return HttpStatus.CREATED;
         }
         return HttpStatus.CONFLICT;
     }

@@ -23,6 +23,14 @@ public class EventQueueService {
     volatile private Instant lastSizeTimestamp;
 
 
+    /**
+     * A service abstracting lower level details of the DAO.  This service is stateful.  In order
+     * to reduce DB calls, this caches the size of the queue if it is returned by a DB operation.
+     *
+     * @param eventQueue the queueDao
+     * @param keyMaker defines the keyspace used by this EventQueue
+     * @see EventQueue
+     */
     public EventQueueService(EventQueue eventQueue, KeyMaker keyMaker) {
         this.eventQueue = eventQueue;
         this.lastSize = 0L;
@@ -32,18 +40,26 @@ public class EventQueueService {
     }
 
     /**
-     * Offers event and updates lastSize
-     * @param event
+     * Offers event and updates {@code lastSize}
+     * @param EventTime
      * @return current version
      * @throws IllegalArgumentException if any errors occur serializing the request
      * @throws IllegalStateException    if any errors occur deserializing the response
      */
-    public long offer(EventTime event) throws IllegalArgumentException, IllegalStateException {
-        Versioned<Long> versionedSize = eventQueue.offer( event, queueKey, clockKey );
+    public long offer(EventTime EventTime) throws IllegalArgumentException, IllegalStateException {
+        Versioned<Long> versionedSize = eventQueue.offer( EventTime, queueKey, clockKey );
         updateSize(versionedSize.data());
         return versionedSize.clock();
     }
 
+    /**
+     * Offers and event and time to the queue.  Updates {@code lastSize}
+     * @param event
+     * @param time
+     * @return
+     * @throws IllegalArgumentException
+     * @throws IllegalStateException
+     */
     public long offer(String event, long time) throws IllegalArgumentException, IllegalStateException {
         return this.offer( new EventTime( event, time ) );
     }
@@ -63,8 +79,9 @@ public class EventQueueService {
     }
 
     /**
-     * @param start
-     * @param end
+     * Range query for items on the queue.  Start and stop are indices.  Uses the same index semantics as Redis' {@code lrange}.
+     * @param start start index
+     * @param end end index
      * @return
      * @throws IllegalStateException if an error occurs deserializing the database response
      */
@@ -90,7 +107,8 @@ public class EventQueueService {
     /**
      * For cases when the exact queue size is not required.  The size returned was guaranteed to be read within
      * the last {@code LAST_SIZE_TTL_MILLI}.  If the last length read is older, then a call to the database will
-     * be made to get the current queue size;
+     * be made to get the current queue size.  Approx size is just as it sounds, approximate.  There is no attempt
+     * to synchronize access to the fields approxSize accesses.
      * @return
      */
     public long approxSize() {
@@ -111,6 +129,10 @@ public class EventQueueService {
         return this.clockKey;
     }
 
+    /**
+     * Returns the key where the queue is stored.
+     * @return queue key
+     */
     public String queueKey() {
         return this.queueKey;
     }

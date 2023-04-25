@@ -6,8 +6,10 @@ import com.ericgha.domain.KeyMaker;
 import com.ericgha.dto.EventStatus;
 import com.ericgha.service.EventQueueSnapshotService;
 import com.ericgha.service.EventService;
+import com.ericgha.service.RateLimiter;
 import com.ericgha.service.data.EventExpiryService;
 import com.ericgha.service.data.EventQueueService;
+import com.ericgha.service.data.FunctionRedisTemplate;
 import com.ericgha.service.data.StrictlyOnceMapService;
 import com.ericgha.service.event_consumer.EventConsumer;
 import com.ericgha.service.event_consumer.EventInvalidator;
@@ -16,16 +18,13 @@ import com.ericgha.service.snapshot_consumer.SnapshotConsumer;
 import com.ericgha.service.snapshot_consumer.SnapshotSTOMPMessenger;
 import com.ericgha.service.snapshot_mapper.SnapshotMapper;
 import com.ericgha.service.snapshot_mapper.ToSnapshotStatusCheckingValidity;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.retry.annotation.EnableRetry;
 
 @Configuration
-@EnableRetry
 public class StrictlyOnceEventConfig {
 
     @Value("${app.web-socket.prefix.client}/${app.strictly-once-event.web-socket.element}")
@@ -41,28 +40,23 @@ public class StrictlyOnceEventConfig {
     Long maxEvents;
 
     @Bean
-    StrictlyOnceMap strictlyOnceMap(
-            @Qualifier("stringLongTemplate") FunctionRedisTemplate<String, Long> template) {
-        return new StrictlyOnceMap( template );
+    @Qualifier("strictlyOnceKeyMaker")
+    KeyMaker strictlyOncekeyMaker() {
+        return new KeyMaker( keyPrefix );
+    }
+
+    @Bean
+    @Qualifier("strictlyOnceEventQueueService")
+    EventQueueService strictlyOnceEventQueueService(EventQueue eventQueue,
+                                                    @Qualifier("strictlyOnceKeyMaker") KeyMaker keyMaker) {
+
+        return new EventQueueService( eventQueue, keyMaker );
     }
 
     @Bean
     @Qualifier("eventInvalidator")
     EventConsumer eventInvalidator(SimpMessagingTemplate messageTemplate) {
         return new EventInvalidator( stompPrefix, messageTemplate );
-    }
-
-    @Bean
-    @Qualifier("strictlyOnceEventPublisher")
-    EventConsumer strictlyOnceEventPublisher(SimpMessagingTemplate messageTemplate,
-                                             StrictlyOnceMapService eventMapService) {
-        return new StrictlyOncePublisher( eventMapService, messageTemplate, stompPrefix );
-    }
-
-    @Bean
-    @Qualifier("strictlyOnceKeyMaker")
-    KeyMaker strictlyOncekeyMaker() {
-        return new KeyMaker( keyPrefix );
     }
 
     @Bean
@@ -75,12 +69,10 @@ public class StrictlyOnceEventConfig {
     }
 
     @Bean
-    @Qualifier("strictlyOnceEventQueueService")
-    EventQueueService strictlyOnceEventQueueService(FunctionRedisTemplate<String, String> redisTemplate,
-                                                    ObjectMapper objectMapper,
-                                                    @Qualifier("strictlyOnceKeyMaker") KeyMaker keyMaker) {
-        EventQueue eventQueue = new EventQueue( redisTemplate, objectMapper );
-        return new EventQueueService( eventQueue, keyMaker );
+    @Qualifier("strictlyOnceEventPublisher")
+    EventConsumer strictlyOnceEventPublisher(SimpMessagingTemplate messageTemplate,
+                                             StrictlyOnceMapService eventMapService) {
+        return new StrictlyOncePublisher( eventMapService, messageTemplate, stompPrefix );
     }
 
     @Bean
@@ -96,10 +88,10 @@ public class StrictlyOnceEventConfig {
 
     @Bean
     @Qualifier("strictlyOnceEventService")
-    EventService strictlyOnceEventService(StrictlyOnceMapService mapService,
-                                          @Qualifier("strictlyOnceEventQueueService")
-                                          EventQueueService eventQueueService,
-                                          SimpMessagingTemplate simpMessagingTemplate) {
+    RateLimiter strictlyOnceEventService(StrictlyOnceMapService mapService,
+                                         @Qualifier("strictlyOnceEventQueueService")
+                                         EventQueueService eventQueueService,
+                                         SimpMessagingTemplate simpMessagingTemplate) {
         return new EventService( stompPrefix, maxEvents, simpMessagingTemplate, eventQueueService,
                                  mapService );
     }
@@ -109,7 +101,7 @@ public class StrictlyOnceEventConfig {
     SnapshotConsumer strictlyOnceSnapshotConsumer(StrictlyOnceMapService mapService,
                                                   SimpMessagingTemplate messagingTemplate) {
         SnapshotMapper<EventStatus> snapshotMapper = new ToSnapshotStatusCheckingValidity( mapService::isValid );
-        return new SnapshotSTOMPMessenger( messagingTemplate, stompPrefix, snapshotMapper);
+        return new SnapshotSTOMPMessenger( messagingTemplate, stompPrefix, snapshotMapper );
     }
 
     @Bean

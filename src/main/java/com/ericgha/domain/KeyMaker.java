@@ -28,6 +28,13 @@ public class KeyMaker {
         this.keyPrefix = keyPrefix;
     }
 
+    /**
+     * Combine elements to make a key.  Elements will be separated by {@code KEY_DELIMITER}.
+     * <p>
+     * ex. {@code elements={"a","b","c"} KEY_DELIMITER = ":"} result: {@code "a:b:c"}
+     * @param elements
+     * @return a string.
+     */
     public String encodeKey(String... elements) {
         String[] prefixAndElements = new String[elements.length + 1];
         prefixAndElements[0] = keyPrefix;
@@ -35,19 +42,37 @@ public class KeyMaker {
         return String.join( KEY_DELIMITER, prefixAndElements );
     }
 
+    /**
+     * Generates a clock key by adding {@code CLOCK_IDENTIFIER} to the {@code keyPrefix}.
+     * @return
+     */
     public String generateClockKey() {
         return encodeKey(CLOCK_IDENTIFIER);
     }
 
+    /**
+     * Generates a queue key by adding {@code QUEUE_IDENTIFIER} to the {@code keyPrefix}
+     * @return
+     */
     public String generateQueueKey() {
         return encodeKey(QUEUE_IDENTIFIER);
     }
 
+    /**
+     * gernerates an event with the format {@code $keyPrefix:$EVENT_IDENTIFIER:$event} for
+     * a {@code KEY_DELIMITER=":"}
+     * @param event
+     * @return
+     */
     public String generateEventKey(@NonNull String event) {
         Objects.requireNonNull( event );
         return encodeKey(EVENT_IDENTIFIER, event);
     }
 
+    /**
+     * The key prefix is the prefix which all keys made by {@link KeyMaker} will be children of.
+     * @return
+     */
     public String keyPrefix() {
         return this.keyPrefix;
     }

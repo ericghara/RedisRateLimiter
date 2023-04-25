@@ -22,7 +22,7 @@ import java.util.function.BiConsumer;
 
 /**
  * Polls the {@link EventQueue} and expires events, submitting them to an {@link EventConsumer}.  The amount of time
- * items remain on the queue is determined by the {@code delayMilli}.  The timestamp of the {@link EventTime} is
+ * items remain on the queue is determined by the {@code delayMilli}.  The clock of the {@link EventTime} is
  * compared to the system time.  When {@code system_time >= delayMilli + event_time} an event <em>may</em> be polled.
  * There are no guarantees when polling will occur, with contention for the queue or the expiry of multiple items in
  * rapid succession creating factors that are outside the control of this service.  However, In times when there is low
@@ -85,11 +85,17 @@ public class EventExpiryService {
         return Objects.nonNull( workerContext );
     }
 
+    /**
+     * This subscribes to a queue.  In periods of quiescence where the queue is empty or the threshold time for the
+     * item at the head of the queue is not met, only a single worker polls the queue with {@code POLL_INTERVAL_MILLI}
+     * delays between each check.  In periods of activity no delay between polls occurs, and workers scale out to
+     * {@code numWorkers} as items are available and meet the time threshold for polling.
+     */
     static class WorkerContext {
 
         private final EventQueueService queueService;
         private final int numWorkers;
-        private final Lock activityLock;
+        private final Lock activityLock;  // in periods of quiescence workers stack up waiting on this lock.
         private final Logger log;
         private final int POLL_INTERVAL_MILLI = 10;
         private final EventConsumer doOnExpire;
@@ -162,7 +168,7 @@ public class EventExpiryService {
             }
 
             private void handleActivity() {
-                activityLock.lock();
+                activityLock.lock();  // await lock. Released by others when they encounter activity, or on shutdown
                 Versioned<EventTime> curEvent = null;
                 try {
                     // block until activity or shutdown
@@ -178,7 +184,7 @@ public class EventExpiryService {
                         }
                     }
                 } finally {
-                    activityLock.unlock();
+                    activityLock.unlock();  // if there is activity (or Shutdown) we free the lock enabling others to poll
                 }
                 if (Objects.nonNull( curEvent )) { // potentially null on shutdown
                     handleExpire( curEvent );

@@ -1,6 +1,6 @@
 package com.ericgha.service;
 
-import com.ericgha.config.FunctionRedisTemplate;
+import com.ericgha.service.data.FunctionRedisTemplate;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dao.StrictlyOnceMap;
 import com.ericgha.domain.KeyMaker;

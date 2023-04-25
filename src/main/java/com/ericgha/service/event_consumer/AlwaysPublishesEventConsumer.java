@@ -7,6 +7,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+/**
+ * An {@link EventConsumer} which sends an {@link PublishedEventMessage} every event that it receives.
+ */
 public class AlwaysPublishesEventConsumer implements EventConsumer {
 
     private final SimpMessagingTemplate messageTemplate;

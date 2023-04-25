@@ -5,6 +5,9 @@ import com.ericgha.dto.Versioned;
 import com.ericgha.dto.message.InvalidatedEventMessage;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+/**
+ * An {@link EventConsumer} which sends and {@link InvalidatedEventMessage} for every event it receives.
+ */
 public class EventInvalidator implements EventConsumer {
 
     private final SimpMessagingTemplate messageTemplate;

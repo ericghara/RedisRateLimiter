@@ -5,6 +5,12 @@ import org.springframework.lang.Nullable;
 
 import java.util.Objects;
 
+/**
+ * A DTO that tracks the difference in state of the {@code time} and {@code isValid} fields of an EventHash.
+ * The {@code curVersion} field enables linearization with to other operations clocked to the same scalar clock.
+ * {@code previous} is intended to be the state before an operation and {@code current} is to represent the
+ * current state.  The {@code curVersion} should be the scalar clock just after the operation.
+ */
 public class TimeIsValidDiff {
 
     private final TimeIsValid previous;

@@ -1,15 +1,14 @@
 package com.ericgha.dao;
 
-import com.ericgha.config.FunctionRedisTemplate;
+import com.ericgha.config.DaoConfig;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.PollResponse;
 import com.ericgha.dto.Versioned;
+import com.ericgha.service.data.FunctionRedisTemplate;
 import com.ericgha.test_fixtures.EnableRedisTestContainer;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -21,26 +20,20 @@ import java.time.Instant;
 import java.util.List;
 
 @EnableRedisTestContainer
-@SpringBootTest(classes = {RedisConfig.class})
+@SpringBootTest(classes = {RedisConfig.class, DaoConfig.class})
 public class EventQueueIntTest {
 
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    ObjectMapper objectMapper;
-    @Autowired
     @Qualifier("stringTemplate")
     FunctionRedisTemplate<String, String> stringTemplate;
 
+    @Autowired
     EventQueue eventQueue;
 
     String clockKey = "test:CLOCK";
     String queueKey = "test:QUEUE";
-
-    @BeforeEach
-    void before() {
-        eventQueue = new EventQueue( stringTemplate, objectMapper );
-    }
 
     @AfterEach
     public void afterEach() {

@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 
 /**
+ * Abstracts some lower level details of {@link OnlyOnceMap} and performs argument validation.
+ * <p>
  * Event map DAO is not prefix aware.  Injects prefix to multiplex multiple EventMaps on one DB instance.
  * <p>
  * <em>Note: </em> Decided to take multiplex approach over using multiple DBs as this is a much lighter

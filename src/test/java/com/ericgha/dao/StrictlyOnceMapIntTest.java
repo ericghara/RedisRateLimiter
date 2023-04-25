@@ -1,6 +1,6 @@
 package com.ericgha.dao;
 
-import com.ericgha.config.FunctionRedisTemplate;
+import com.ericgha.service.data.FunctionRedisTemplate;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventHash;
 import com.ericgha.dto.EventTime;
@@ -104,7 +104,7 @@ public class StrictlyOnceMapIntTest {
     static Stream<Arguments> eventHashTestSource() {
 
         return Stream.of(
-                // format {intial state, time to put, expected end state}
+                // format {initial state, time to put, expected end state}
                 arguments( new TimeIsValid( null, null ), 0L, new EventHash( 0L, true, null ),
                            "Empty Map, no conflict" ),
                 arguments( new TimeIsValid( 0L, true ), EVENT_DURATION, new EventHash( EVENT_DURATION, true, 0L ),
@@ -180,7 +180,7 @@ public class StrictlyOnceMapIntTest {
         }
         stringLongTemplate.opsForValue().set( CLOCK_KEY, 0L );
         strictlyOnceMap.putEvent( eventKey, nextEvent.time(), CLOCK_KEY, EVENT_DURATION );
-        Assertions.assertEquals( expectedClock, strictlyOnceMap.getClock( CLOCK_KEY ), "Expected clock state." );
+        Assertions.assertEquals( expectedClock, stringLongTemplate.opsForValue().get( CLOCK_KEY ), "Expected clock state." );
 
     }
 

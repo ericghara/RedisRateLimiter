@@ -9,6 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+/**
+ * An event consumer which checks the validity of an event using an {@link StrictlyOnceMapService} if the event
+ * is {@code Valid} a {@link PublishedEventMessage} is sent.  No message is sent for {@code Invalid} events.
+ */
 public class StrictlyOncePublisher implements EventConsumer {
 
     private final Logger log;
@@ -16,6 +20,12 @@ public class StrictlyOncePublisher implements EventConsumer {
     private final SimpMessagingTemplate messageTemplate;
     private final String messagePrefix;
 
+    /**
+     *
+     * @param mapService
+     * @param messageTemplate
+     * @param messagePrefix where the messages should be sent.
+     */
     public StrictlyOncePublisher(StrictlyOnceMapService mapService, SimpMessagingTemplate messageTemplate,
                                  String messagePrefix) {
         this.log =

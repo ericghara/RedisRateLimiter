@@ -1,6 +1,6 @@
 package com.ericgha.dao;
 
-import com.ericgha.config.FunctionRedisTemplate;
+import com.ericgha.service.data.FunctionRedisTemplate;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.test_fixtures.EnableRedisTestContainer;
 import org.junit.jupiter.api.AfterEach;

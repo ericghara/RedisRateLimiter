@@ -16,6 +16,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * A service which makes periodic snapshots of an {@link EventQueueService}.
+ */
 public class EventQueueSnapshotService {
 
     private final Logger log;
@@ -29,6 +32,9 @@ public class EventQueueSnapshotService {
     @Nullable
     private Runnable canceler;
 
+    /**
+     * @param eventQueueService the queue to snapshot.
+     */
     public EventQueueSnapshotService(@NonNull EventQueueService eventQueueService) {
         this.log = LoggerFactory.getLogger( this.getClass().getName() );
         this.eventQueueService = eventQueueService;
@@ -36,8 +42,15 @@ public class EventQueueSnapshotService {
         this.isRunning = false;
     }
 
-    public synchronized <T> void run(long periodMilli,
-                                     @NonNull SnapshotConsumer snapshotConsumer) throws IllegalStateException {
+    /**
+     * Start the service.
+     *
+     * @param periodMilli      how often snapshots should be taken
+     * @param snapshotConsumer a consumer of the snapshots
+     * @throws IllegalStateException if the service is already running.
+     */
+    public synchronized void run(long periodMilli,
+                                 @NonNull SnapshotConsumer snapshotConsumer) throws IllegalStateException {
         if (isRunning) {
             throw new IllegalStateException( "Cannot change state to run, this is already running." );
         }
@@ -83,8 +96,6 @@ public class EventQueueSnapshotService {
         return true;
     }
 
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private void snapshot() {
         try {
             Versioned<List<EventTime>> versionedEvents = eventQueueService.getAll();

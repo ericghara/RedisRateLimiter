@@ -6,6 +6,9 @@ import com.ericgha.dto.Status;
 
 import java.util.List;
 
+/**
+ * Maps a chunk of {@link EventTime}s to {@link EventStatus}s.  All events are mapped to {@code Valid} statuses.
+ */
 public class ToSnapshotStatusAlwaysValid implements SnapshotMapper<EventStatus> {
 
     @Override

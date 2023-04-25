@@ -8,10 +8,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+/**
+ * Maps a chunk of {@link EventTime}s to {@link EventStatus}s using a provided {@code validator} function to determine
+ * the statuses in each chunk.
+ */
 public class ToSnapshotStatusCheckingValidity implements SnapshotMapper<EventStatus> {
 
     private final Function<List<EventTime>, List<Status>> validator;
 
+    /**
+     *
+     * @param validator used to map the {@code EventTime}s in a chunk to {@code Status}s
+     */
     public ToSnapshotStatusCheckingValidity(Function<List<EventTime>, List<Status>> validator) {
         this.validator = validator;
     }

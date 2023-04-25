@@ -1,6 +1,6 @@
 package com.ericgha.service.data;
 
-import com.ericgha.config.FunctionRedisTemplate;
+import com.ericgha.config.DaoConfig;
 import com.ericgha.config.OnlyOnceEventConfig;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.config.WebSocketConfig;
@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
 @EnableRedisTestContainer
-@SpringBootTest(classes = {RedisConfig.class, OnlyOnceEventConfig.class, WebSocketConfig.class})
+@SpringBootTest(classes = {RedisConfig.class, DaoConfig.class, OnlyOnceEventConfig.class, WebSocketConfig.class})
 class EventExpiryServiceIntTest {
 
     private static final int DELAY_MILLI = 10;  // delay period for queue
