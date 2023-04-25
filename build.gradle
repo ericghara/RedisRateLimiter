@@ -5,9 +5,7 @@ plugins {
 }
 
 ext {
-    jUnitVersion = '5.9.2'
     testcontainersVersion = '1.17.6'
-    jacksonCoreVersion = '2.14.1'
 }
 
 group 'com.ericgha'
@@ -22,11 +20,14 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework:spring-aspects'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
-    implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonCoreVersion}"
-    testImplementation "org.junit.jupiter:junit-jupiter-api:${jUnitVersion}"
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${jUnitVersion}"
-    testImplementation "org.junit.jupiter:junit-jupiter-params:${jUnitVersion}"
+    implementation 'redis.clients:jedis'
+    implementation "com.fasterxml.jackson.core:jackson-databind"
+    testImplementation "org.junit.jupiter:junit-jupiter-api"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine"
+    testImplementation "org.junit.jupiter:junit-jupiter-params"
+    testImplementation "org.mockito:mockito-inline"
     testImplementation "org.testcontainers:testcontainers:${testcontainersVersion}"
     testImplementation "org.testcontainers:junit-jupiter:${testcontainersVersion}"
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
@@ -34,6 +35,16 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+tasks.register('startRedis', Exec) {
+    workingDir './src/main'
+    commandLine "docker", "compose", "up", "-d"
+}
+
+tasks.register('stopRedis', Exec) {
+    workingDir './src/main'
+    commandLine "docker", "compose", "down", "-t=5"
 }
 
 tasks.withType(JavaCompile) {
@@ -53,4 +64,7 @@ java {
         languageVersion = JavaLanguageVersion.of(19)
     }
 }
+
+tasks.bootRun.dependsOn(startRedis)
+tasks.bootRun.finalizedBy(stopRedis)
 

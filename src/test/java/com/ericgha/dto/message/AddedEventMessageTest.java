@@ -19,7 +19,7 @@ class EventStatusMessageInterfaceTest {
         SubmittedEventMessage submittedEventMessage = new SubmittedEventMessage( 0, new EventTime( "test", 1 ) );
         String jsonStr = objectMapper.writer().writeValueAsString( submittedEventMessage );
         String expectedStr = """
-                {"timestamp":0,"eventTime":{"event":"test","time":1},"messageType":"SUBMITTED_EVENT"}""";
+                {"clock":0,"eventTime":{"event":"test","time":1},"messageType":"SUBMITTED_EVENT"}""";
         Assertions.assertEquals(expectedStr, jsonStr);
     }
 

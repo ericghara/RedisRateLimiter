@@ -3,12 +3,12 @@ package com.ericgha.service.data;
 import com.ericgha.dao.EventQueue;
 import com.ericgha.dto.EventTime;
 import com.ericgha.dto.Versioned;
-import com.ericgha.exception.DirtyStateException;
 import com.ericgha.service.event_consumer.EventConsumer;
 import jakarta.annotation.Nullable;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.retry.TerminatedRetryException;
+import org.springframework.dao.DataAccessException;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -22,7 +22,7 @@ import java.util.function.BiConsumer;
 
 /**
  * Polls the {@link EventQueue} and expires events, submitting them to an {@link EventConsumer}.  The amount of time
- * items remain on the queue is determined by the {@code delayMilli}.  The timestamp of the {@link EventTime} is
+ * items remain on the queue is determined by the {@code delayMilli}.  The clock of the {@link EventTime} is
  * compared to the system time.  When {@code system_time >= delayMilli + event_time} an event <em>may</em> be polled.
  * There are no guarantees when polling will occur, with contention for the queue or the expiry of multiple items in
  * rapid succession creating factors that are outside the control of this service.  However, In times when there is low
@@ -33,6 +33,7 @@ import java.util.function.BiConsumer;
  * multiple expirations polling occurs as quickly as events may be processed.
  */
 
+// todo 'cleanly' restart dead workers
 public class EventExpiryService {
 
     private final EventQueueService queueService;
@@ -52,7 +53,7 @@ public class EventExpiryService {
      * @param delayMilli    the amount of time events should be <em>aged</em> on the queue.
      * @throws IllegalStateException if {@code EventExpiryService} was already running
      */
-    public synchronized void start(EventConsumer eventConsumer, int delayMilli,
+    public synchronized void start(EventConsumer eventConsumer, long delayMilli,
                                    int numWorkers) throws IllegalStateException {
         if (Objects.isNull( eventConsumer )) {
             throw new NullPointerException( "Received a null EventConsumer." );
@@ -67,9 +68,11 @@ public class EventExpiryService {
     /**
      * @return previous run state
      */
+    @PreDestroy
     public synchronized boolean stop() {
         if (isRunning()) {
             workerContext.stop();
+            this.workerContext = null;
             return true;
         }
         return false;
@@ -82,11 +85,17 @@ public class EventExpiryService {
         return Objects.nonNull( workerContext );
     }
 
+    /**
+     * This subscribes to a queue.  In periods of quiescence where the queue is empty or the threshold time for the
+     * item at the head of the queue is not met, only a single worker polls the queue with {@code POLL_INTERVAL_MILLI}
+     * delays between each check.  In periods of activity no delay between polls occurs, and workers scale out to
+     * {@code numWorkers} as items are available and meet the time threshold for polling.
+     */
     static class WorkerContext {
 
         private final EventQueueService queueService;
         private final int numWorkers;
-        private final Lock activityLock;
+        private final Lock activityLock;  // in periods of quiescence workers stack up waiting on this lock.
         private final Logger log;
         private final int POLL_INTERVAL_MILLI = 10;
         private final EventConsumer doOnExpire;
@@ -131,11 +140,9 @@ public class EventExpiryService {
             PollWorker worker = new PollWorker( workerId );
             BiConsumer<Void, Throwable> errorHandler = (_v, e) -> {
                 if (Objects.nonNull( e )) {
-                    log.error( "Exception for worker {}}:", workerId, e );
-                    if (!shutdownRequested) {
-                        submitWorker( workerId );
-                    }
+                    log.error( "Exception for worker {}:", workerId, e );
                 }
+                log.info( "EventExpiryService:{}:worker-{}: Went down.", queueService.queueKey(), workerId );
             };
             CompletableFuture.runAsync( worker, pool ).whenComplete( errorHandler );
         }
@@ -161,7 +168,7 @@ public class EventExpiryService {
             }
 
             private void handleActivity() {
-                activityLock.lock();
+                activityLock.lock();  // await lock. Released by others when they encounter activity, or on shutdown
                 Versioned<EventTime> curEvent = null;
                 try {
                     // block until activity or shutdown
@@ -177,28 +184,31 @@ public class EventExpiryService {
                         }
                     }
                 } finally {
-                    activityLock.unlock();
+                    activityLock.unlock();  // if there is activity (or Shutdown) we free the lock enabling others to poll
                 }
                 if (Objects.nonNull( curEvent )) { // potentially null on shutdown
-                    doOnExpire.accept( curEvent );
+                    handleExpire( curEvent );
                 }
                 this.beginExhaustivePoll(); // detects shutdown itself
             }
 
+            private void handleExpire(Versioned<EventTime> event) {
+                try {
+                    doOnExpire.accept( event );
+                } catch (Exception e) {
+                    log.warn( "Encountered an error while expiring event {}.  Status will be lost.", event );
+                    log.debug( "Exception on expiring event (version: {}): {}.", event.clock(), e );
+                }
+            }
+
             @Nullable
-            // returns null if thresholdTime not meet OR if DirtyStateException or retries exhausted
             private Versioned<EventTime> pollQueue() {
                 Versioned<EventTime> polledEvent = null;
+                long now = Instant.now().toEpochMilli();
                 try {
-                    long now = Instant.now().toEpochMilli();
                     polledEvent = queueService.tryPoll( now - delayMilli );
-                } catch (RuntimeException e) {
-                    switch (e) {
-                        case DirtyStateException de ->
-                                log.debug( "Caught a DirtyStateException while polling EventQueue." );
-                        case TerminatedRetryException te -> log.debug( "Exhausted retries while polling EventQueue." );
-                        default -> throw e;
-                    }
+                } catch (DataAccessException e) {
+                    return null;  // scale in on failure
                 }
                 return Objects.nonNull( polledEvent ) ? polledEvent : null;
             }
@@ -207,7 +217,7 @@ public class EventExpiryService {
                 while (!shutdownRequested) {
                     Versioned<EventTime> curEvent = this.pollQueue();
                     if (Objects.nonNull( curEvent )) {
-                        doOnExpire.accept( curEvent );
+                        handleExpire( curEvent );
                     } else {
                         break;  // Queue empty or should wait for events to expire
                     }

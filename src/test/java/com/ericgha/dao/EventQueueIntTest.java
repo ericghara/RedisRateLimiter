@@ -1,128 +1,145 @@
 package com.ericgha.dao;
 
+import com.ericgha.config.DaoConfig;
 import com.ericgha.config.RedisConfig;
 import com.ericgha.dto.EventTime;
+import com.ericgha.dto.PollResponse;
 import com.ericgha.dto.Versioned;
+import com.ericgha.service.data.FunctionRedisTemplate;
+import com.ericgha.test_fixtures.EnableRedisTestContainer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
-@Testcontainers
-@SpringBootTest(classes = {RedisConfig.class})
+@EnableRedisTestContainer
+@SpringBootTest(classes = {RedisConfig.class, DaoConfig.class})
 public class EventQueueIntTest {
-
-    @Container
-    private static final GenericContainer<?> redis = new GenericContainer<>( DockerImageName.parse( "redis:7" ) )
-            .withExposedPorts( 6379 )
-            .withReuse( true );
 
     @Autowired
     RedisConnectionFactory connectionFactory;
     @Autowired
-    RedisTemplate<String, EventTime> eventTimeRedisTemplate;
+    @Qualifier("stringTemplate")
+    FunctionRedisTemplate<String, String> stringTemplate;
+
+    @Autowired
     EventQueue eventQueue;
 
-    @DynamicPropertySource
-    static void properties(DynamicPropertyRegistry registry) {
-        registry.add( "spring.data.redis.host", redis::getHost );
-        registry.add( "spring.data.redis.port", () -> redis.getMappedPort( 6379 ) );
-    }
-
-    @BeforeEach
-    void before() {
-        eventQueue = new EventQueue( eventTimeRedisTemplate );
-    }
+    String clockKey = "test:CLOCK";
+    String queueKey = "test:QUEUE";
 
     @AfterEach
     public void afterEach() {
-        RedisConnection connection = connectionFactory.getConnection();
-        connection.commands().flushAll();
-    }
-
-    @Test
-    public void queueIdReturnsUUIDWithAutowiredConstructor() {
-        Assertions.assertDoesNotThrow( () -> UUID.fromString( eventQueue.queueId() ) );
+        try (RedisConnection connection = connectionFactory.getConnection()) {
+            connection.commands().flushAll();
+        }
     }
 
     @Test
     public void offerAddsToEndOfQueue() {
         EventTime firstEvent = new EventTime( "first", 0 );
         EventTime secondEvent = new EventTime( "second", 1 );
-        eventQueue.offer( firstEvent );
-        eventQueue.offer( secondEvent );
-        Assertions.assertEquals( firstEvent, eventQueue.poll() );
-        Assertions.assertEquals( secondEvent, eventQueue.poll() );
+        eventQueue.offer( firstEvent, queueKey, clockKey );
+        eventQueue.offer( secondEvent, queueKey, clockKey );
+        Assertions.assertEquals( firstEvent, eventQueue.poll( queueKey ) );
+        Assertions.assertEquals( secondEvent, eventQueue.poll( queueKey ) );
     }
 
     @Test
-    public void offerReturnsClock() {
+    public void offerReturnsIncreasingClocks() {
         EventTime event0 = new EventTime( "zero", 0 );
         EventTime event1 = new EventTime( "one", 1 );
-        long earlierClock = eventQueue.offer( event0 );
-        long laterClock = eventQueue.offer( event1 );
-        Assertions.assertTrue( earlierClock < laterClock, "Event added first has lower clock" );
+        Versioned<Long> earlierResult = eventQueue.offer( event0, queueKey, clockKey );
+        Versioned<Long> laterResult = eventQueue.offer( event1, queueKey, clockKey );
+        Assertions.assertTrue( earlierResult.clock() < laterResult.clock(), "Event added first has lower clock" );
+    }
+
+    @Test
+    public void offerReturnsExpectedSize() {
+        EventTime event0 = new EventTime( "zero", 0 );
+        Versioned<Long> earlierResult = eventQueue.offer( event0, queueKey, clockKey );
+        Assertions.assertEquals( 1L, earlierResult.data() );
+        EventTime event1 = new EventTime( "one", 1 );
+        Versioned<Long> laterResult = eventQueue.offer( event1, queueKey, clockKey );
+        Assertions.assertEquals( 2L, laterResult.data() );
     }
 
     @Test
     public void sizeReturnsExpected() {
-        Assertions.assertEquals( 0L, eventQueue.size() );
+        Assertions.assertEquals( 0L, eventQueue.size( queueKey ) );
         EventTime event = new EventTime( "first", 0 );
-        eventQueue.offer( event );
-        Assertions.assertEquals( 1L, eventQueue.size() );
+        eventQueue.offer( event, queueKey, clockKey );
+        Assertions.assertEquals( 1L, eventQueue.size( queueKey ) );
     }
 
     @Test
-    public void tryPollReturnsNullWhenQueueEmpty() {
-        Assertions.assertNull( eventQueue.tryPoll( 1 ) );
+    public void tryPollReturnsOnlyListSizeWhenQueueEmpty() {
+        int threshold = 1;
+        PollResponse response = eventQueue.tryPoll( threshold, queueKey, clockKey );
+        Assertions.assertNull( response.versionedEventTime() );
+        Assertions.assertEquals( 0, response.queueSize() );
     }
 
     @Test
-    public void tryPollReturnsNullWhenHeadYoungerThanThreshold() {
+    public void tryPollReturnsOnlyListSizeWhenHeadYoungerThanThreshold() {
         int threshold = 1;
         EventTime event = new EventTime( "Test Event", 2 ); // notice later time than threshold
-        eventQueue.offer( event );
-        Assertions.assertNull( eventQueue.tryPoll( threshold ) );
+        eventQueue.offer( event, queueKey, clockKey );
+        PollResponse response = eventQueue.tryPoll( threshold, queueKey, clockKey );
+        Assertions.assertNull( response.versionedEventTime() );
+        Assertions.assertEquals( 1, response.queueSize() );
     }
 
     @Test
-    public void tryPollReturnsEventWhenHeadSameAgeAsThreshold() {
+    public void tryPollReturnsExpectedEventWhenHeadSameAgeAsThreshold() {
         int threshold = 1;
         EventTime event = new EventTime( "Test Event", threshold ); // notice same time as threshold
-        eventQueue.offer( event );
-        Versioned<EventTime> versionedEvent = eventQueue.tryPoll( threshold );
+        eventQueue.offer( event, queueKey, clockKey );
+        Versioned<EventTime> versionedEvent = eventQueue.tryPoll( threshold, queueKey, clockKey ).versionedEventTime();
         Assertions.assertEquals( event, versionedEvent.data(), "Event is expected" );
         Assertions.assertTrue( versionedEvent.clock() > 0, "clock > 0" );
+    }
+
+    @Test
+    public void tryPollReturnsExpectedQueueSizeWhenResultAvailable() {
+        int threshold = 1;
+        EventTime event = new EventTime( "Test Event", threshold ); // notice same time as threshold
+        eventQueue.offer( event, queueKey, clockKey );
+        long expectedLength = 1;
+        long foundLength = eventQueue.tryPoll( threshold, queueKey, clockKey ).queueSize();
+        Assertions.assertEquals( expectedLength, foundLength );
     }
 
     @Test
     public void tryPollReturnsEventWhenHeadOlderThanThreshold() {
         int threshold = 1;
         EventTime event = new EventTime( "Test Event", 0 ); // notice older than threshold
-        eventQueue.offer( event );
-        Versioned<EventTime> versionedEvent = eventQueue.tryPoll( threshold );
+        eventQueue.offer( event, queueKey, clockKey );
+        Versioned<EventTime> versionedEvent = eventQueue.tryPoll( threshold, queueKey, clockKey ).versionedEventTime();
         Assertions.assertEquals( event, versionedEvent.data(), "Event is expected" );
         Assertions.assertTrue( versionedEvent.clock() > 0, "clock > 0" );
     }
 
     @Test
+    public void tryPollDoesNotIncrementClockWhenNoElementPolled() {
+        EventTime event = new EventTime( "Test Event", 1 );
+        eventQueue.offer( event, queueKey, clockKey );
+        long expectedClock = Long.parseLong( stringTemplate.opsForValue().get( clockKey ) );
+        eventQueue.tryPoll( 0, queueKey, clockKey );
+        long foundClock = Long.parseLong( stringTemplate.opsForValue().get( clockKey ) );
+        Assertions.assertEquals( expectedClock, foundClock, "Clock should not change on a null poll." );
+    }
+
+    @Test
     public void getRangeEmptyQueue() {
-        Assertions.assertEquals( List.of(), eventQueue.getRange( 0, -1 ).data() );
+        Assertions.assertEquals( List.of(), eventQueue.getRange( 0, -1, queueKey, clockKey ).data() );
     }
 
     @Test
@@ -130,17 +147,20 @@ public class EventQueueIntTest {
         EventTime event0 = new EventTime( "Test Event0", 0 );
         EventTime event1 = new EventTime( "Test Event1", 1 );
         List<EventTime> expectedEvents = List.of( event0, event1 );
-        expectedEvents.forEach( eventQueue::offer );
-        Versioned<List<EventTime>> versionedRange = eventQueue.getRange( 0, -1 );
+        expectedEvents.forEach( event -> eventQueue.offer( event, queueKey, clockKey ) );
+        Versioned<List<EventTime>> versionedRange = eventQueue.getRange( 0, -1, queueKey, clockKey );
         Assertions.assertEquals( expectedEvents, versionedRange.data() );
     }
 
     @Test
     public void operationsAreLinearized() {
         // where clock starts is not generally enforced, so just referencing a start point.
-        long expectedVersion = eventQueue.getRange( 0, -1 ).clock();
-        Assertions.assertEquals( ++expectedVersion, eventQueue.offer( new EventTime( "test", 0 ) ) );
-        Assertions.assertEquals( ++expectedVersion, eventQueue.tryPoll( Instant.now().toEpochMilli() ).clock() );
-        Assertions.assertEquals( ++expectedVersion, eventQueue.getRange( 0, -1 ).clock() );
+        long expectedVersion = eventQueue.getRange( 0, -1, queueKey, clockKey ).clock();
+        Assertions.assertEquals( ++expectedVersion,
+                                 eventQueue.offer( new EventTime( "test", 0 ), queueKey, clockKey ).clock() );
+        Assertions.assertEquals( ++expectedVersion,
+                                 eventQueue.tryPoll( Instant.now().toEpochMilli(), queueKey, clockKey )
+                                         .versionedEventTime().clock() );
+        Assertions.assertEquals( ++expectedVersion, eventQueue.getRange( 0, -1, queueKey, clockKey ).clock() );
     }
 }

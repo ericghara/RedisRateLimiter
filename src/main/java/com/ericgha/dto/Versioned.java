@@ -2,6 +2,11 @@ package com.ericgha.dto;
 
 import org.springframework.lang.NonNull;
 
+/**
+ * A generic container for versioned data.  The {@code clock} field allows {@code Versioned} objects (versioned to
+ * the same clock) to be linearized.
+ * @param <T>
+ */
 public class Versioned<T> {
 
     private final long clock;
