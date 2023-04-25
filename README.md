@@ -40,5 +40,11 @@ All status updates and snapshots are sent with a scalar clock.  It is *guarantee
 
 The synchronization is not partition tolerant.
 
+### Build & Run
+**Requirements:** Docker, Docker compose and Java 19 (uses preview features)
+
+Start RateLimiter and Redis: ```gradle bootRun```
+
+Stop Redis: ```gradle stopRedis```
 
 
