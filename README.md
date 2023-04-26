@@ -1,6 +1,6 @@
 ## Redis Rate Limiter
 
-A service which enforces that events occur only **once** in a period of time (`event-duration`).
+A service which ensures that events occur only **once** in a period of time (`event-duration`).
 
 ### Modes
 
