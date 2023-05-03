@@ -42,7 +42,7 @@ local function put_event(keys, args)
             -- cannot call hmset with null hash value, and prefer not to use a sentinel value
             redis.call("HMSET", eventKey, time_hkey, updatedTime, is_valid_hkey, updatedIsValid)
         end
-        redis.call("EXPIRE", eventKey, math.ceil(2 * durationMillis / 1000))
+        redis.call("PEXPIRE", eventKey, 2*durationMillis)
         updatedClock = redis.call("INCR", clockKey)
         return
     end
