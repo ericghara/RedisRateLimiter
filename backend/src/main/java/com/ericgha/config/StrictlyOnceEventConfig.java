@@ -9,7 +9,6 @@ import com.ericgha.service.EventService;
 import com.ericgha.service.RateLimiter;
 import com.ericgha.service.data.EventExpiryService;
 import com.ericgha.service.data.EventQueueService;
-import com.ericgha.service.data.FunctionRedisTemplate;
 import com.ericgha.service.data.StrictlyOnceMapService;
 import com.ericgha.service.event_consumer.EventConsumer;
 import com.ericgha.service.event_consumer.EventInvalidator;

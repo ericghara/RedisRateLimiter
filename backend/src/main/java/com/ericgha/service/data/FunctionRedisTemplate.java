@@ -46,11 +46,12 @@ public class FunctionRedisTemplate<K, V> extends RedisTemplate<K, V> {
         }
     }
 
-    @Override
+
     /**
      * @throws IllegalStateException if the underlying connection is not a Jedis connection or if an error occured
      * (up)loading the redis functions.
      */
+    @Override
     public void afterPropertiesSet() throws IllegalStateException {
         super.afterPropertiesSet();
         try (Jedis connection = getJedisConnection()) {

@@ -5,10 +5,8 @@ misc/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### Front End
-src/main/js/node_modules
-src/main/js/.pnp
-.pnp.js
+## temporary ##
+frontend
 
 ### IntelliJ IDEA ###
 .idea

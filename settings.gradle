@@ -1,1 +1,4 @@
 rootProject.name = 'RedisRateLimiter'
+include ':backend'
+include ':frontend'
+
